@@ -35,6 +35,8 @@ class TimelineAligner:
 
     WASAPI loopback delivers no frames while nothing plays on the device. Without filling those gaps
     the segmenter would never see the pause that ends a segment, and later timestamps would drift.
+    A microphone can lose frames too (a stalled stream overflows); without the silence every later
+    timestamp of that track would come out early.
     """
 
     def __init__(self, start_time: float, gap_threshold_s: float = 0.5, idle_margin_s: float = 0.3) -> None:
@@ -75,7 +77,7 @@ class AudioCapture:
         device: AudioDevice,
         source: Source,
         start_time: float,
-        fill_gaps: bool,
+        silent_when_idle: bool,
         on_audio: AudioSink,
         on_lost: LossHandler,
     ) -> None:
@@ -86,7 +88,8 @@ class AudioCapture:
         self._on_lost = on_lost
         self._queue: queue.Queue[tuple[bytes, float]] = queue.Queue()
         self._resampler = soxr.ResampleStream(device.sample_rate, SAMPLE_RATE, 1, dtype="float32")
-        self._aligner = TimelineAligner(start_time) if fill_gaps else None
+        self._aligner = TimelineAligner(start_time)
+        self._silent_when_idle = silent_when_idle
         self._last_arrival = start_time
         self._stopping = threading.Event()
         self._stream: Any = None
@@ -150,7 +153,7 @@ class AudioCapture:
         try:
             data, arrival = self._queue.get(timeout=_POLL_S)
         except queue.Empty:
-            if self._aligner is not None:
+            if self._silent_when_idle:
                 self._emit(np.zeros(self._aligner.silence_while_idle(time.monotonic()), dtype=np.float32))
             return
         self._last_arrival = arrival
@@ -158,9 +161,10 @@ class AudioCapture:
 
     def _process_chunk(self, data: bytes, arrival: float) -> None:
         samples = np.asarray(self._resampler.resample_chunk(self._downmix(data)), dtype=np.float32)
-        if self._aligner is not None:
-            silence = self._aligner.silence_before_chunk(len(samples), arrival)
-            self._emit(np.zeros(silence, dtype=np.float32))
+        silence = self._aligner.silence_before_chunk(len(samples), arrival)
+        if silence and not self._silent_when_idle:
+            log.warning("Lost %.1f s of %s audio; later audio keeps its real time", silence / SAMPLE_RATE, self.source)
+        self._emit(np.zeros(silence, dtype=np.float32))
         self._emit(samples)
 
     def _downmix(self, data: bytes) -> Audio:
@@ -170,7 +174,7 @@ class AudioCapture:
     def _lost_reason(self, now: float) -> str | None:
         if not self._stream.is_active():
             return "the audio stream stopped (device unplugged?)"
-        if self._aligner is None and now - self._last_arrival > _STALL_LIMIT_S:
+        if not self._silent_when_idle and now - self._last_arrival > _STALL_LIMIT_S:
             return f"no audio for {_STALL_LIMIT_S:.0f} s (device unplugged?)"
         return None
 

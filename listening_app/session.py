@@ -147,7 +147,8 @@ class RecordingSession:
         )
 
     def _start_capture(self, source: Source, choice: DeviceChoice, start_time: float) -> None:
-        capture = AudioCapture(self._audio.pa, choice.capture, source, start_time, fill_gaps=source is Source.OTHERS,
+        capture = AudioCapture(self._audio.pa, choice.capture, source, start_time,
+                               silent_when_idle=source is Source.OTHERS,
                                on_audio=partial(self._on_audio, source), on_lost=self._on_lost)
         try:
             capture.start()
