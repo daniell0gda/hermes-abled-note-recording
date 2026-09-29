@@ -1,0 +1,22 @@
+# Local configuration holds API keys
+config.yaml
+
+# Transcripts, outboxes and logs
+*.jsonl
+logs/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# PyInstaller
+build/
+dist/
+*.spec
+
+# Temporary / generated files
+.gen/

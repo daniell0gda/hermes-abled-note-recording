@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "listening-app"
+version = "0.1.0"
+description = "Windows tray app that transcribes online meetings (mic + system audio) live and streams the transcript to Hermes."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pystray>=0.19",
+    "Pillow>=10",
+    "PyAudioWPatch>=0.2.12",
+    "onnxruntime>=1.17",
+    "numpy>=1.26",
+    "soxr>=0.3",
+    "litellm>=1.103",
+    "httpx>=0.27",
+    "ruamel.yaml>=0.18",
+    "pydantic>=2.6",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "mypy>=1.10", "pyinstaller>=6.5"]
+
+[project.scripts]
+listening-app = "listening_app.main:main"
+
+[tool.setuptools]
+packages = ["listening_app"]
+
+[tool.setuptools.package-data]
+listening_app = ["assets/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["listening_app", "tests"]
+
+[[tool.mypy.overrides]]
+module = ["pystray.*", "pyaudiowpatch.*", "soxr.*", "onnxruntime.*", "litellm.*"]
+ignore_missing_imports = true

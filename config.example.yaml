@@ -1,0 +1,45 @@
+# Listening App configuration.
+# Location: config.yaml next to ListeningApp.exe if it exists there,
+# otherwise %APPDATA%\ListeningApp\config.yaml (created from this file on first run).
+
+language: pl                  # pl | en | auto
+output_dir: "%USERPROFILE%\\Documents\\MeetingTranscripts"
+save_audio: false             # keep every segment WAV in <session_id>/audio/ (failed segments are always kept)
+hotkey: "ctrl+alt+r"          # global Start/Stop hotkey; "" disables it
+notifications: true           # pop-ups; false = only the tray icon and tooltip show state and errors
+log_level: INFO               # DEBUG also logs transcript text
+
+devices:
+  mic: null                   # device name; null = system default
+  output: null                # output device whose loopback is captured; null = system default
+
+segmentation:
+  pause_ms: 800
+  max_segment_s: 30
+  min_segment_ms: 400
+  padding_ms: 200
+  vad_threshold: 0.5
+
+stt:
+  selected: groq/whisper-large-v3-turbo
+  models:
+    - groq/whisper-large-v3-turbo
+    - openai/gpt-4o-mini-transcribe
+    # - xai/grok-voice-transcribe-2.0
+  prompt: ""                # glossary: names, project terms
+  workers: 3
+
+providers:                    # env vars override these, e.g. GROQ_API_KEY, OPENAI_API_KEY
+  groq:   { api_key: "" }
+  openai: { api_key: "" }
+  xai:    { api_key: "", grok_auth: false }   # grok_auth: true = your Grok account ("Authorize Grok" in the tray) instead of a key
+
+hermes:
+  enabled: true
+  url: "http://10.30.28.25:8642/p/simple-ng-proj/v1"
+  api_key: ""                 # HERMES_API_KEY overrides this
+  payload_mode: responses     # responses | chat | raw
+  model: ""                   # "" = profile name from the URL (/p/<profile>/), else hermes-agent
+  raw_path: ""                # payload_mode=raw only: path appended to url ("" = post to url itself)
+  timeout_s: 30
+  send_session_events: true
