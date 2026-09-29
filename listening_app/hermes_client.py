@@ -1,11 +1,11 @@
-"""Hermes streaming: payload builders, ordered delivery through a persistent outbox, retry with backoff."""
+"""Hermes streaming: chunking, payload builders, ordered delivery through a persistent outbox, retry with backoff."""
 
 import json
 import logging
 import re
 import threading
 from collections import deque
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
@@ -28,11 +28,12 @@ PERMANENT_REJECTIONS = frozenset({400, 409, 413, 415, 422})
 _PROFILE_PATTERN = re.compile(r"/p/([^/]+)/")
 _DEFAULT_PROFILE = "default"
 _CLOSE_TIMEOUT_S = 2.0
+_PORTION_FIELDS = {"seq", "source", "start", "end", "wall_start", "text", "language"}
 
 
 class EventKind(StrEnum):
     SESSION_START = "session_start"
-    TRANSCRIPT_PORTION = "transcript_portion"
+    TRANSCRIPT_CHUNK = "transcript_chunk"
     SESSION_END = "session_end"
 
 
@@ -41,13 +42,17 @@ class HermesEvent(BaseModel):
 
     kind: EventKind
     session_id: str
-    seq: int | None = None
+    seqs: tuple[int, ...] = ()
+    """Seq of every transcript portion the event carries."""
     fields: dict[str, Any]
 
     @property
     def key(self) -> str:
-        """Stable per event, used as the Idempotency-Key so a resend is never processed twice."""
-        return f"{self.session_id}:{self.kind if self.seq is None else self.seq}"
+        """Stable per event, used as the Idempotency-Key so a resend is never processed twice.
+
+        Every portion belongs to exactly one chunk, so a chunk is keyed by the seq of its first portion.
+        """
+        return f"{self.session_id}:{self.seqs[0] if self.seqs else self.kind}"
 
     def to_raw(self) -> dict[str, Any]:
         return {"type": self.kind.value, "session_id": self.session_id, **self.fields}
@@ -59,9 +64,34 @@ def session_start_event(session_id: str, started_at: str, devices: Mapping[str, 
     return HermesEvent(kind=EventKind.SESSION_START, session_id=session_id, fields=fields)
 
 
-def portion_event(session_id: str, segment: TranscriptSegment) -> HermesEvent:
-    fields = segment.model_dump(mode="json", include={"seq", "source", "start", "end", "wall_start", "text", "language"})
-    return HermesEvent(kind=EventKind.TRANSCRIPT_PORTION, session_id=session_id, seq=segment.seq, fields=fields)
+def chunk_event(session_id: str, segments: Sequence[TranscriptSegment]) -> HermesEvent:
+    fields = {"portions": [_portion(segment) for segment in segments]}
+    return HermesEvent(kind=EventKind.TRANSCRIPT_CHUNK, session_id=session_id,
+                       seqs=tuple(segment.seq for segment in segments), fields=fields)
+
+
+def _portion(segment: TranscriptSegment) -> dict[str, Any]:
+    return segment.model_dump(mode="json", include=_PORTION_FIELDS)
+
+
+class ChunkBuffer:
+    """Holds transcript portions until their JSON adds up to `limit_bytes`, then releases them as one chunk."""
+
+    def __init__(self, limit_bytes: int) -> None:
+        self._limit_bytes = limit_bytes
+        self._segments: list[TranscriptSegment] = []
+        self._size = 0
+
+    def add(self, segment: TranscriptSegment) -> list[TranscriptSegment]:
+        """The full chunk once the limit is reached, otherwise an empty list."""
+        self._segments.append(segment)
+        self._size += len(json.dumps(_portion(segment), ensure_ascii=False).encode())
+        return self.flush() if self._size >= self._limit_bytes else []
+
+    def flush(self) -> list[TranscriptSegment]:
+        """Release whatever is held, full or not."""
+        chunk, self._segments, self._size = self._segments, [], 0
+        return chunk
 
 
 def session_end_event(session_id: str, ended_at: str, segments: int, failed: int, duration_s: int) -> HermesEvent:
@@ -186,14 +216,15 @@ def pending_events(path: Path) -> list[HermesEvent]:
 def delivery_statuses(path: Path) -> dict[int, HermesStatus]:
     """Hermes status of every transcript portion in a session's journal, by seq."""
     statuses: dict[int, HermesStatus] = {}
-    seq_by_key: dict[str, int] = {}
+    seqs_by_key: dict[str, tuple[int, ...]] = {}
     for entry in read_journal(path):
-        if entry.op is JournalOp.ENQUEUED and entry.event and entry.event.seq is not None:
-            seq_by_key[entry.key] = entry.event.seq
-            statuses.setdefault(entry.event.seq, HermesStatus.QUEUED)
-        elif entry.key in seq_by_key:
-            delivered = entry.op is JournalOp.DELIVERED
-            statuses[seq_by_key[entry.key]] = HermesStatus.DELIVERED if delivered else HermesStatus.FAILED
+        if entry.op is JournalOp.ENQUEUED and entry.event and entry.event.seqs:
+            seqs_by_key[entry.key] = entry.event.seqs
+            for seq in entry.event.seqs:
+                statuses.setdefault(seq, HermesStatus.QUEUED)
+        elif entry.key in seqs_by_key:
+            status = HermesStatus.DELIVERED if entry.op is JournalOp.DELIVERED else HermesStatus.FAILED
+            statuses.update(dict.fromkeys(seqs_by_key[entry.key], status))
     return statuses
 
 

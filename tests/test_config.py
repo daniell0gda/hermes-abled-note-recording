@@ -34,6 +34,7 @@ def test_example_config_is_valid(config_file: Path) -> None:
 
     assert config.language is Language.POLISH
     assert config.hermes.payload_mode is PayloadMode.RESPONSES
+    assert config.hermes.chunk_kb == 4
     assert config.stt.selected == "groq/whisper-large-v3-turbo"
 
 

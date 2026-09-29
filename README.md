@@ -68,6 +68,7 @@ All options are documented in [`config.example.yaml`](config.example.yaml). The 
 | `stt.selected`, `stt.models` | Groq whisper-large-v3-turbo | any litellm transcription model string |
 | `stt.prompt` | `""` | glossary for STT: names, project terms |
 | `hermes.payload_mode` | `responses` | `responses`, `chat` or `raw` (see below) |
+| `hermes.chunk_kb` | `4` | send transcript portions in chunks of at least this many KB; `0` = one by one |
 
 - **Tray selections** (devices, model, Hermes on/off, Hermes endpoint) are saved to the file immediately, and your
   comments in it are preserved.
@@ -172,21 +173,26 @@ Segment line:
 
 ## Hermes streaming
 
-Every transcribed segment is sent as soon as it is ready. `me` and `others` portions are sent
-separately. Delivery runs on a background thread with a persistent outbox:
+Transcribed segments (portions) are collected into chunks: once the collected portions reach
+`hermes.chunk_kb` KB of JSON (UTF-8), they are sent together in one request. Stop sends the last, partly
+filled chunk. `chunk_kb: 0` sends every portion on its own as soon as it is ready. `me` and `others` portions
+share chunks, in the order they were transcribed. A change of `chunk_kb` applies to the next recording.
+Delivery runs on a background thread with a persistent outbox:
 
-- One request at a time, strictly in order. A portion counts as delivered only on a 2xx answer.
+- One request at a time, strictly in order. A chunk counts as delivered only on a 2xx answer.
 - Network errors, 401/403/404, 408, 429 and 5xx are retried with exponential backoff (1 s … 60 s).
-  400, 409, 413, 415 and 422 are permanent: the portion is marked `failed` and the queue moves on.
-- Every request has `Idempotency-Key: <session_id>:<seq>`, so a resend is never processed twice.
-- Undelivered portions survive restarts: they are resent, in order, the next time the app starts.
+  400, 409, 413, 415 and 422 are permanent: the chunk's portions are marked `failed` and the queue moves on.
+- Every request has `Idempotency-Key: <session_id>:<seq of the chunk's first portion>`, so a resend is never
+  processed twice.
+- Undelivered chunks survive restarts: they are resent, in order, the next time the app starts. Portions still
+  waiting for their chunk to fill are not: after a crash they are only in the local transcript.
 - "Hermes streaming" in the tray pauses and resumes sending without stopping the recording.
 
-Every request has `Authorization: Bearer <key>`. Events are `session_start`, `transcript_portion` and
+Every request has `Authorization: Bearer <key>`. Events are `session_start`, `transcript_chunk` and
 `session_end` (sent on Stop with totals when `send_session_events: true`):
 
 ```json
-{"type":"transcript_portion","session_id":"2026-09-28T10-13-40_a1b2","seq":12,"source":"others","start":83.42,"end":91.1,"wall_start":"2026-09-28T10:15:03.420+02:00","text":"...","language":"pl"}
+{"type":"transcript_chunk","session_id":"2026-09-28T10-13-40_a1b2","portions":[{"seq":12,"source":"others","start":83.42,"end":91.1,"wall_start":"2026-09-28T10:15:03.420+02:00","text":"...","language":"pl"}]}
 ```
 
 `payload_mode` decides how each event is wrapped. Switch it in the config or with **Hermes endpoint ▸**

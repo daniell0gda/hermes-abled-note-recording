@@ -94,6 +94,7 @@ class HermesConfig(_Section):
     model: str = ""
     raw_path: str = ""
     timeout_s: float = Field(default=30, gt=0)
+    chunk_kb: int = Field(default=4, ge=0)
     send_session_events: bool = True
 
     @field_validator("url")

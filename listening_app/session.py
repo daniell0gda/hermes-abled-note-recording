@@ -14,9 +14,10 @@ from listening_app.capture import AudioCapture, CaptureError
 from listening_app.config import AppConfig
 from listening_app.devices import AudioSystem, DeviceChoice, DeviceError
 from listening_app.hermes_client import (
+    ChunkBuffer,
     HermesClient,
+    chunk_event,
     delivery_statuses,
-    portion_event,
     session_end_event,
     session_start_event,
 )
@@ -79,6 +80,7 @@ class RecordingSession:
         self._captures: dict[Source, AudioCapture] = {}
         self._hermes_lock = threading.Lock()
         self._hermes_started = False
+        self._chunks = ChunkBuffer(config.hermes.chunk_kb * 1024)
         self._stt_failure_reported = False
         self._store: TranscriptStore | None = None
         self._transcriber: Transcriber | None = None
@@ -112,6 +114,7 @@ class RecordingSession:
             self._flush(source)
         if self._transcriber is not None:
             self._transcriber.close()
+        self._send_chunk(self._chunks.flush())
         ended_at = datetime.now().astimezone()
         self._send_session_end(ended_at)
         if self._store is not None:
@@ -212,7 +215,11 @@ class RecordingSession:
         self._store.append(record)
         if send:
             self._start_hermes_session()
-            self._hermes.submit(portion_event(self.session_id, record), self.files.outbox)
+            self._send_chunk(self._chunks.add(record))
+
+    def _send_chunk(self, segments: list[TranscriptSegment]) -> None:
+        if segments:
+            self._hermes.submit(chunk_event(self.session_id, segments), self.files.outbox)
 
     def _keep_audio(self, transcription: Transcription) -> str | None:
         failed = transcription.status is SegmentStatus.STT_FAILED

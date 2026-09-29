@@ -42,4 +42,5 @@ hermes:
   model: ""                   # "" = profile name from the URL (/p/<profile>/), else hermes-agent
   raw_path: ""                # payload_mode=raw only: path appended to url ("" = post to url itself)
   timeout_s: 30
+  chunk_kb: 4                 # send transcript portions in chunks of at least this many KB; 0 = each portion on its own
   send_session_events: true

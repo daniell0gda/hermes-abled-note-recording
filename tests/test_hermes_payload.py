@@ -2,11 +2,12 @@ import json
 
 from listening_app.config import PayloadMode
 from listening_app.hermes_client import (
+    ChunkBuffer,
     HermesSettings,
     build_request,
+    chunk_event,
     classify,
     model_from_url,
-    portion_event,
     Outcome,
 )
 from listening_app.models import HermesStatus, SegmentStatus, Source, TranscriptSegment
@@ -16,22 +17,33 @@ SEGMENT = TranscriptSegment(seq=12, source=Source.OTHERS, start=83.42, end=91.1,
                             wall_start="2026-09-28T10:15:03.420+02:00", text="No to ustalmy, że release idzie w piątek.",
                             language="pl", stt_model="groq/whisper-large-v3-turbo", status=SegmentStatus.OK,
                             hermes_status=HermesStatus.QUEUED)
-EVENT = portion_event("2026-09-28T10-13-40_a1b2", SEGMENT)
+NEXT_SEGMENT = SEGMENT.model_copy(update={"seq": 13, "source": Source.ME, "text": "Zgoda."})
+EVENT = chunk_event("2026-09-28T10-13-40_a1b2", [SEGMENT])
 
 
 def settings(mode: PayloadMode, raw_path: str = "") -> HermesSettings:
     return HermesSettings(URL, "secret", mode, model_from_url(URL), raw_path, 10)
 
 
-def test_raw_mode_posts_the_portion_itself() -> None:
-    request = build_request(EVENT, settings(PayloadMode.RAW, raw_path="/ingest/"))
+def segment_with_text(seq: int, text: str) -> TranscriptSegment:
+    return SEGMENT.model_copy(update={"seq": seq, "text": text})
+
+
+def test_raw_mode_posts_the_chunk_itself() -> None:
+    event = chunk_event("2026-09-28T10-13-40_a1b2", [SEGMENT, NEXT_SEGMENT])
+
+    request = build_request(event, settings(PayloadMode.RAW, raw_path="/ingest/"))
 
     assert request.url == f"{URL}/ingest"
     assert request.body == {
-        "type": "transcript_portion", "session_id": "2026-09-28T10-13-40_a1b2", "seq": 12, "source": "others",
-        "start": 83.42, "end": 91.1, "wall_start": "2026-09-28T10:15:03.420+02:00",
-        "text": "No to ustalmy, że release idzie w piątek.", "language": "pl",
+        "type": "transcript_chunk", "session_id": "2026-09-28T10-13-40_a1b2", "portions": [
+            {"seq": 12, "source": "others", "start": 83.42, "end": 91.1, "wall_start": "2026-09-28T10:15:03.420+02:00",
+             "text": "No to ustalmy, że release idzie w piątek.", "language": "pl"},
+            {"seq": 13, "source": "me", "start": 83.42, "end": 91.1, "wall_start": "2026-09-28T10:15:03.420+02:00",
+             "text": "Zgoda.", "language": "pl"},
+        ],
     }
+    assert request.headers["Idempotency-Key"] == "2026-09-28T10-13-40_a1b2:12"
 
 
 def test_responses_mode_keeps_the_meeting_in_one_conversation() -> None:
@@ -41,7 +53,7 @@ def test_responses_mode_keeps_the_meeting_in_one_conversation() -> None:
     assert request.body["conversation"] == "2026-09-28T10-13-40_a1b2"
     assert request.body["model"] == "simple-ng-proj"
     assert request.body["background"] is True
-    assert json.loads(request.body["input"])["text"] == SEGMENT.text
+    assert json.loads(request.body["input"])["portions"][0]["text"] == SEGMENT.text
 
 
 def test_chat_mode_sends_one_user_message_with_the_session_header() -> None:
@@ -63,6 +75,30 @@ def test_model_defaults_to_the_profile_name() -> None:
     assert model_from_url(URL) == "simple-ng-proj"
     assert model_from_url("http://host:8642/v1") == "hermes-agent"
     assert model_from_url("http://host:8642/p/default/v1") == "hermes-agent"
+
+
+def test_portions_are_held_until_their_utf8_json_fills_the_chunk() -> None:
+    buffer = ChunkBuffer(limit_bytes=1024)
+    first, second = segment_with_text(1, "ż" * 300), segment_with_text(2, "ż" * 300)
+
+    assert buffer.add(first) == []
+    assert buffer.add(second) == [first, second]
+    assert buffer.flush() == []
+
+
+def test_a_zero_chunk_size_sends_every_portion_on_its_own() -> None:
+    buffer = ChunkBuffer(limit_bytes=0)
+
+    assert buffer.add(SEGMENT) == [SEGMENT]
+    assert buffer.add(NEXT_SEGMENT) == [NEXT_SEGMENT]
+
+
+def test_flush_releases_a_partly_filled_chunk() -> None:
+    buffer = ChunkBuffer(limit_bytes=1024)
+    buffer.add(SEGMENT)
+
+    assert buffer.flush() == [SEGMENT]
+    assert buffer.flush() == []
 
 
 def test_status_codes_are_classified() -> None:

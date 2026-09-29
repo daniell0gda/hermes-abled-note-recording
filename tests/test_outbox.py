@@ -13,8 +13,8 @@ from listening_app.hermes_client import (
     HttpRequest,
     JournalOp,
     Outbox,
+    chunk_event,
     delivery_statuses,
-    portion_event,
     session_start_event,
 )
 from listening_app.models import HermesStatus, SegmentStatus, Source, TranscriptSegment
@@ -23,11 +23,15 @@ SESSION = "2026-09-28T10-13-40_a1b2"
 SETTINGS = HermesSettings("http://hermes.test/v1", "key", PayloadMode.RAW, "hermes-agent", "", 1)
 
 
+def segment(seq: int) -> TranscriptSegment:
+    return TranscriptSegment(seq=seq, source=Source.ME, start=seq, end=seq + 1.0, wall_start="2026-09-28T10:13:41+02:00",
+                             text=f"zdanie {seq}", language="pl", stt_model="groq/whisper-large-v3-turbo",
+                             status=SegmentStatus.OK, hermes_status=HermesStatus.QUEUED)
+
+
 def portion(seq: int) -> HermesEvent:
-    segment = TranscriptSegment(seq=seq, source=Source.ME, start=seq, end=seq + 1.0, wall_start="2026-09-28T10:13:41+02:00",
-                                text=f"zdanie {seq}", language="pl", stt_model="groq/whisper-large-v3-turbo",
-                                status=SegmentStatus.OK, hermes_status=HermesStatus.QUEUED)
-    return portion_event(SESSION, segment)
+    """A chunk holding one portion."""
+    return chunk_event(SESSION, [segment(seq)])
 
 
 class FakeHermes:
@@ -102,6 +106,16 @@ def test_delivery_statuses_follow_the_journal(journal: Path) -> None:
     outbox.complete_head(JournalOp.FAILED, "HTTP 422")
 
     assert delivery_statuses(journal) == {0: HermesStatus.DELIVERED, 1: HermesStatus.FAILED, 2: HermesStatus.QUEUED}
+
+
+def test_delivery_status_of_a_chunk_applies_to_each_of_its_portions(journal: Path) -> None:
+    outbox = Outbox()
+    outbox.push(chunk_event(SESSION, [segment(0), segment(2)]), journal)
+    outbox.push(chunk_event(SESSION, [segment(1), segment(3)]), journal)
+    outbox.complete_head(JournalOp.DELIVERED, "HTTP 200")
+
+    assert delivery_statuses(journal) == {0: HermesStatus.DELIVERED, 2: HermesStatus.DELIVERED,
+                                          1: HermesStatus.QUEUED, 3: HermesStatus.QUEUED}
 
 
 def test_portions_queued_while_hermes_is_down_arrive_in_order_without_duplicates(journal: Path) -> None:
