@@ -104,6 +104,44 @@ python -m listening_app --segment-wav talk.wav [--transcribe]   # offline segmen
 The exe accepts the same flags (e.g. `ListeningApp.exe --list-devices`) and prints to the PowerShell
 window it was started from.
 
+### Headless with an AI agent (MCP)
+
+`--mcp` runs the app without the tray, as an [MCP](https://modelcontextprotocol.io) server on
+stdin/stdout. An AI client on this PC (Claude Code, Claude Desktop or any other MCP client) starts the
+process and controls it through these tools:
+
+| Tool | What it does |
+|---|---|
+| `get_status` | recording state, selections, the current problem, the latest notifications |
+| `start_recording` / `stop_recording` | as in the tray; Stop returns the final transcript file and its stats |
+| `get_transcript` | segments of the running (or any) session; pass `next_offset` back as `offset` to follow the meeting live |
+| `list_sessions` | recorded sessions, newest first |
+| `list_devices`, `select_microphone`, `select_output`, `refresh_devices` | devices; `null` selects the system default |
+| `select_model` | one of `stt.models` |
+| `set_hermes_streaming`, `set_hermes_endpoint` | Hermes on/off and the payload mode |
+| `finalize_unfinished_sessions`, `reload_config`, `authorize_grok` | as in the tray menu |
+
+Register it in Claude Code:
+
+```powershell
+claude mcp add listening-app -- C:\Tools\ListeningApp\ListeningApp.exe --mcp
+```
+
+Or in any client that takes an `mcpServers` JSON config (Claude Desktop, a project `.mcp.json`):
+
+```json
+{"mcpServers": {"listening-app": {"command": "C:\\Tools\\ListeningApp\\ListeningApp.exe", "args": ["--mcp"]}}}
+```
+
+From source, use `.venv\Scripts\python.exe` as the command with `-m listening_app --mcp` as the arguments.
+
+- It uses the same config file, transcripts folder and Hermes streaming as the tray app. Selections are
+  saved to `config.yaml`. Pop-ups are not shown. Their messages appear in `get_status` instead.
+- When the AI client disconnects, a running recording is stopped and finalized. If the client kills the
+  process instead, `finalize_unfinished_sessions` recovers the transcript on the next start.
+- Run either the tray app or the MCP server, not both. Each would record on its own and resend the same
+  queued Hermes portions.
+
 ## Output files
 
 Each recording gets its own folder `output_dir\<session_id>\` (`session_id` = start time + random
@@ -189,9 +227,10 @@ folder that opens.
 
 | Module | Role |
 |---|---|
-| `main.py` | entry point: CLI tools or the tray app |
+| `main.py` | entry point: CLI tools, the tray app or the headless MCP server |
 | `app.py` | controller: services, tray actions, Hermes events |
 | `tray.py` | pystray icon, menu, notifications |
+| `mcp_server.py` | headless mode: MCP tools for AI agents instead of the tray |
 | `session.py` | one recording: capture → segment → transcribe → store + Hermes |
 | `capture.py` | one capture thread per source → 16 kHz mono (fills loopback silence gaps) |
 | `devices.py` | WASAPI inputs/outputs, loopback lookup, default fallback |

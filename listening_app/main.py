@@ -3,15 +3,22 @@
 import argparse
 import logging
 import sys
+from collections.abc import Callable
 from pathlib import Path
+from typing import Protocol
 
 from listening_app import __version__, cli, paths
-from listening_app.app import AppController
+from listening_app.app import AppController, Ui
 from listening_app.config import AppConfig, ConfigError, ConfigManager, ensure_config_file, load_config, resolve_config_path
 from listening_app.logging_setup import setup_logging
+from listening_app.mcp_server import McpApp
 from listening_app.tray import TrayApp
 
 log = logging.getLogger(__name__)
+
+
+class Frontend(Ui, Protocol):
+    def run(self, on_ready: Callable[[], None]) -> None: ...
 
 
 def parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -23,6 +30,8 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     tools.add_argument("--record-test", type=float, metavar="SECONDS",
                        help="record mic and loopback into record_me.wav / record_others.wav")
     tools.add_argument("--segment-wav", type=Path, metavar="WAV", help="split a WAV file at pauses and list segments")
+    tools.add_argument("--mcp", action="store_true",
+                       help="run headless, without the tray, as an MCP server on stdin/stdout for AI agents")
     parser.add_argument("--transcribe", action="store_true", help="with --segment-wav: transcribe every segment")
     parser.add_argument("--out", type=Path, default=Path("."), help="output folder for --record-test")
     return parser.parse_args(argv)
@@ -38,10 +47,10 @@ def main(argv: list[str] | None = None) -> int:
         except Exception as exc:  # the windowed exe would otherwise show a traceback dialog
             print(f"Error: {type(exc).__name__}: {exc}", file=sys.stderr)
             return 1
-    return run_app(config_path)
+    return run_app(config_path, headless=args.mcp)
 
 
-def run_app(config_path: Path) -> int:
+def run_app(config_path: Path, headless: bool = False) -> int:
     notices: list[tuple[str, str]] = []
     if ensure_config_file(config_path):
         notices.append(("Config created", f"{config_path}: add your API keys there or set GROQ_API_KEY / HERMES_API_KEY."))
@@ -55,12 +64,13 @@ def run_app(config_path: Path) -> int:
     config = configs.config
     formatter = setup_logging(paths.logs_dir(), config.log_level, console=not paths.is_frozen())
     formatter.set_secrets(config.secret_values())
-    log.info("Listening App %s starting with %s", __version__, config_path)
+    log.info("Listening App %s starting %s with %s", __version__, "headless (MCP)" if headless else "in the tray",
+             config_path)
     controller = AppController(configs, formatter)
-    tray = TrayApp(controller)
-    controller.attach(tray)
+    frontend: Frontend = McpApp(controller) if headless else TrayApp(controller)
+    controller.attach(frontend)
     try:
-        tray.run(on_ready=lambda: controller.start_services(notices, config_error))
+        frontend.run(on_ready=lambda: controller.start_services(notices, config_error))
     finally:
         controller.shutdown()
     log.info("Listening App stopped")

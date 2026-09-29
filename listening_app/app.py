@@ -21,6 +21,10 @@ log = logging.getLogger(__name__)
 PRIVACY_REMINDER = "Remember to tell the other participants that the meeting is being transcribed."
 
 
+class ControlError(Exception):
+    """A start or stop that cannot happen in the current state, or that failed."""
+
+
 class Ui(Protocol):
     def notify(self, title: str, message: str) -> None: ...
 
@@ -80,6 +84,11 @@ class AppController:
         return self._session is not None
 
     @property
+    def session_id(self) -> str | None:
+        session = self._session
+        return session.session_id if session is not None else None
+
+    @property
     def is_busy(self) -> bool:
         return self._busy
 
@@ -130,6 +139,22 @@ class AppController:
         self._refresh()
         worker = self._stop_worker if recording else self._start_worker
         threading.Thread(target=worker, name="session-control", daemon=True).start()
+
+    def start_recording(self) -> str:
+        """Start on the calling thread and return the session id, for callers that wait for the result."""
+        self._begin_transition(while_recording=False)
+        session = self._start_worker()
+        if session is None:
+            raise ControlError(self._error or "Recording could not start")
+        return session.session_id
+
+    def stop_recording(self) -> Path:
+        """Stop on the calling thread and return the final transcript file."""
+        self._begin_transition(while_recording=True)
+        transcript = self._stop_worker()
+        if transcript is None:
+            raise ControlError("Stopping the recording failed. The live .jsonl transcript is kept.")
+        return transcript
 
     def select_mic(self, name: str | None) -> None:
         self._save(("devices", "mic"), name)
@@ -233,7 +258,17 @@ class AppController:
         if self._ui is not None:
             self._ui.refresh()
 
-    def _start_worker(self) -> None:
+    def _begin_transition(self, while_recording: bool) -> None:
+        """Claim the start/stop slot. Refused while busy, or unless is_recording equals `while_recording`."""
+        with self._lock:
+            if self._busy:
+                raise ControlError("A recording is being started or stopped right now")
+            if self.is_recording is not while_recording:
+                raise ControlError("Already recording" if self.is_recording else "Not recording")
+            self._busy = True
+        self._refresh()
+
+    def _start_worker(self) -> RecordingSession | None:
         session = RecordingSession(self.config, self._audio, self._hermes, self.notify, self._source_lost)
         try:
             with com_initialized():
@@ -243,26 +278,30 @@ class AppController:
             self._error = str(exc)
             self.notify("Recording could not start", str(exc))
             self._finish_transition(None)
-            return
+            return None
         self._error = None
         self._finish_transition(session)
         self.notify("Recording started", PRIVACY_REMINDER)
+        return session
 
-    def _stop_worker(self) -> None:
+    def _stop_worker(self) -> Path | None:
         session = self._session
+        transcript = None
         if session is not None:
             with com_initialized():
-                self._stop_session(session)
+                transcript = self._stop_session(session)
         self._finish_transition(None)
+        return transcript
 
-    def _stop_session(self, session: RecordingSession) -> None:
+    def _stop_session(self, session: RecordingSession) -> Path | None:
         try:
             transcript = self._finalize(session.stop())
         except Exception as exc:
             log.exception("Stopping the recording failed")
             self.notify("Stopping the recording failed", f"{exc}. The live .jsonl transcript is kept.")
-            return
+            return None
         self.notify("Recording stopped", f"Transcript saved: {transcript.name}")
+        return transcript
 
     def _authorize_grok_worker(self) -> None:
         try:

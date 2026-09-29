@@ -168,13 +168,18 @@ def finalize_session(files: SessionFiles, delivery: Mapping[int, HermesStatus]) 
     return files.final
 
 
-def find_unfinished_sessions(directory: Path, exclude: Collection[str] = ()) -> list[SessionFiles]:
-    """Sessions with a JSONL but no final JSON, e.g. after a crash."""
+def find_sessions(directory: Path) -> list[SessionFiles]:
+    """Every session in the transcripts folder (every folder with a JSONL), oldest first."""
     if not directory.is_dir():
         return []
     candidates = (SessionFiles(directory, folder.name) for folder in sorted(directory.iterdir()) if folder.is_dir())
-    return [files for files in candidates
-            if files.jsonl.exists() and not files.final.exists() and files.session_id not in exclude]
+    return [files for files in candidates if files.jsonl.exists()]
+
+
+def find_unfinished_sessions(directory: Path, exclude: Collection[str] = ()) -> list[SessionFiles]:
+    """Sessions with a JSONL but no final JSON, e.g. after a crash."""
+    return [files for files in find_sessions(directory)
+            if not files.final.exists() and files.session_id not in exclude]
 
 
 def find_outboxes(directory: Path) -> list[Path]:
@@ -187,11 +192,18 @@ def _with_delivery(segment: TranscriptSegment, delivery: Mapping[int, HermesStat
     return segment.model_copy(update={"hermes_status": status}) if status else segment
 
 
-def _read_meta(files: SessionFiles, segments: list[TranscriptSegment]) -> SessionMeta:
+def read_meta(files: SessionFiles) -> SessionMeta | None:
     try:
         return SessionMeta.model_validate_json(files.meta.read_text(encoding="utf-8"))
     except (OSError, ValidationError):
-        log.warning("No readable metadata for session %s, reconstructing it", files.session_id)
+        return None
+
+
+def _read_meta(files: SessionFiles, segments: list[TranscriptSegment]) -> SessionMeta:
+    meta = read_meta(files)
+    if meta is not None:
+        return meta
+    log.warning("No readable metadata for session %s, reconstructing it", files.session_id)
     started_at = segments[0].wall_start if segments else _modified_at(files.jsonl)
     unknown = "unknown"
     stt_model = segments[0].stt_model if segments else unknown
