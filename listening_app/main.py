@@ -11,7 +11,6 @@ from listening_app import __version__, cli, paths
 from listening_app.app import AppController, Ui
 from listening_app.config import AppConfig, ConfigError, ConfigManager, ensure_config_file, load_config, resolve_config_path
 from listening_app.logging_setup import setup_logging
-from listening_app.mcp_server import McpApp
 from listening_app.tray import TrayApp
 
 log = logging.getLogger(__name__)
@@ -32,6 +31,7 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     tools.add_argument("--segment-wav", type=Path, metavar="WAV", help="split a WAV file at pauses and list segments")
     tools.add_argument("--mcp", action="store_true",
                        help="run headless, without the tray, as an MCP server on stdin/stdout for AI agents")
+    tools.add_argument("--sketch-window", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--transcribe", action="store_true", help="with --segment-wav: transcribe every segment")
     parser.add_argument("--out", type=Path, default=Path("."), help="output folder for --record-test")
     return parser.parse_args(argv)
@@ -39,6 +39,9 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    if args.sketch_window:
+        from listening_app.sketch.window_app import run_window
+        return run_window()
     config_path = resolve_config_path(args.config)
     if args.check_config or args.list_devices or args.record_test or args.segment_wav:
         cli.attach_parent_console()
@@ -67,7 +70,7 @@ def run_app(config_path: Path, headless: bool = False) -> int:
     log.info("Listening App %s starting %s with %s", __version__, "headless (MCP)" if headless else "in the tray",
              config_path)
     controller = AppController(configs, formatter)
-    frontend: Frontend = McpApp(controller) if headless else TrayApp(controller)
+    frontend = _create_frontend(controller, headless)
     controller.attach(frontend)
     try:
         frontend.run(on_ready=lambda: controller.start_services(notices, config_error))
@@ -75,6 +78,13 @@ def run_app(config_path: Path, headless: bool = False) -> int:
         controller.shutdown()
     log.info("Listening App stopped")
     return 0
+
+
+def _create_frontend(controller: AppController, headless: bool) -> Frontend:
+    if not headless:
+        return TrayApp(controller)
+    from listening_app.mcp_server import McpApp
+    return McpApp(controller)
 
 
 def run_tool(args: argparse.Namespace, config_path: Path) -> int:

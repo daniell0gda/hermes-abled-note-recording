@@ -21,8 +21,8 @@ NEXT_SEGMENT = SEGMENT.model_copy(update={"seq": 13, "source": Source.ME, "text"
 EVENT = chunk_event("2026-09-28T10-13-40_a1b2", [SEGMENT])
 
 
-def settings(mode: PayloadMode, raw_path: str = "") -> HermesSettings:
-    return HermesSettings(URL, "secret", mode, model_from_url(URL), raw_path, 10)
+def settings(mode: PayloadMode, raw_path: str = "", system_prompt: str = "") -> HermesSettings:
+    return HermesSettings(URL, "secret", mode, model_from_url(URL), raw_path, 10, system_prompt)
 
 
 def segment_with_text(seq: int, text: str) -> TranscriptSegment:
@@ -56,12 +56,20 @@ def test_responses_mode_keeps_the_meeting_in_one_conversation() -> None:
     assert json.loads(request.body["input"])["portions"][0]["text"] == SEGMENT.text
 
 
-def test_chat_mode_sends_one_user_message_with_the_session_header() -> None:
+def test_chat_mode_sends_each_event_alone_without_a_hermes_session() -> None:
     request = build_request(EVENT, settings(PayloadMode.CHAT))
 
     assert request.url == f"{URL}/chat/completions"
-    assert request.body["messages"][0]["role"] == "user"
-    assert request.headers["X-Hermes-Session-Id"] == "2026-09-28T10-13-40_a1b2"
+    assert request.body["messages"] == [{"role": "user", "content": json.dumps(EVENT.to_raw(), ensure_ascii=False)}]
+    assert "X-Hermes-Session-Id" not in request.headers
+
+
+def test_chat_mode_sends_the_system_prompt_for_the_events_session() -> None:
+    request = build_request(EVENT, settings(PayloadMode.CHAT, system_prompt="Append this event to sources/{session_id}.md"))
+
+    system, user = request.body["messages"]
+    assert system == {"role": "system", "content": "Append this event to sources/2026-09-28T10-13-40_a1b2.md"}
+    assert user["role"] == "user"
 
 
 def test_every_request_carries_auth_and_a_stable_idempotency_key() -> None:

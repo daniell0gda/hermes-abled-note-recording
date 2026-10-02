@@ -25,7 +25,7 @@ def config_file(tmp_path: Path) -> Path:
 
 @pytest.fixture(autouse=True)
 def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    for name in ("GROQ_API_KEY", "OPENAI_API_KEY", "XAI_API_KEY", "HERMES_API_KEY"):
+    for name in ("GROQ_API_KEY", "OPENAI_API_KEY", "XAI_API_KEY", "HERMES_API_KEY", "TYPESAFE_API_KEY"):
         monkeypatch.delenv(name, raising=False)
 
 
@@ -146,3 +146,59 @@ def test_selected_model_missing_from_the_list_is_still_offered() -> None:
     config = AppConfig.model_validate({"stt": {"selected": "openai/whisper-1", "models": ["groq/whisper-large-v3"]}})
 
     assert config.stt.choices() == ["groq/whisper-large-v3", "openai/whisper-1"]
+
+
+def test_sketch_defaults(config_file: Path) -> None:
+    sketch = load_config(config_file).sketch
+
+    assert sketch.hotkey == "ctrl+alt+d"
+    assert sketch.jev_model == "jev-latest"
+    assert sketch.draw_model == "xai/grok-4-fast-non-reasoning"
+    assert sketch.label_language is Language.AUTO
+    assert sketch.point_radius_px == 24
+    assert sketch.point_window_s == 2
+
+
+def test_typesafe_environment_variable_wins_over_the_sketch_key(config_file: Path,
+                                                                monkeypatch: pytest.MonkeyPatch) -> None:
+    config_file.write_text("sketch:\n  api_key: from-config\n")
+    monkeypatch.setenv("TYPESAFE_API_KEY", "from-env")
+
+    key = load_config(config_file).jev_key()
+
+    assert key.value == "from-env"
+    assert key.source is KeySource.ENVIRONMENT
+
+
+def test_missing_typesafe_key_is_reported_as_missing() -> None:
+    assert AppConfig().jev_key().source is KeySource.MISSING
+
+
+def test_empty_sketch_hotkey_disables_it(config_file: Path) -> None:
+    config_file.write_text('sketch:\n  hotkey: ""\n')
+
+    assert load_config(config_file).sketch.hotkey == ""
+
+
+def test_invalid_sketch_hotkey_is_rejected(config_file: Path) -> None:
+    config_file.write_text("sketch:\n  hotkey: d\n")
+
+    with pytest.raises(ConfigError, match="sketch.hotkey"):
+        load_config(config_file)
+
+
+def test_sketch_hotkey_must_differ_from_the_recording_hotkey(config_file: Path) -> None:
+    config_file.write_text('hotkey: "ctrl+alt+r"\nsketch:\n  hotkey: "Ctrl + Alt + R"\n')
+
+    with pytest.raises(ConfigError, match="sketch.hotkey must differ from hotkey"):
+        load_config(config_file)
+
+
+def test_sketch_keys_are_redacted_from_logs(config_file: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    config_file.write_text("sketch:\n  api_key: typesafe-secret\n  draw_model: mistral/mistral-small-latest\n")
+    monkeypatch.setenv("MISTRAL_API_KEY", "mistral-secret")
+
+    secrets = load_config(config_file).secret_values()
+
+    assert "typesafe-secret" in secrets
+    assert "mistral-secret" in secrets

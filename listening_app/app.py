@@ -4,6 +4,7 @@ import logging
 import os
 import subprocess
 import threading
+from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
 
@@ -13,12 +14,17 @@ from listening_app.hermes_client import HermesClient, HermesSettings
 from listening_app.hotkey import GlobalHotkey, HotkeyError, parse_hotkey
 from listening_app.logging_setup import RedactingFormatter, set_level
 from listening_app.session import RecordingSession, finalize
-from listening_app.transcriber import authorize_grok, import_litellm
+from listening_app.sketch.controller import DIAGRAMS_FOLDER, LiveSketch
+from listening_app.transcriber import authorize_grok, grok_authorized, import_litellm
 from listening_app.transcript_store import SessionFiles, find_outboxes, find_unfinished_sessions
 
 log = logging.getLogger(__name__)
 
 PRIVACY_REMINDER = "Remember to tell the other participants that the meeting is being transcribed."
+
+
+def _hotkey_label(text: str) -> str:
+    return "+".join(part.capitalize() for part in text.split("+"))
 
 
 class ControlError(Exception):
@@ -44,10 +50,16 @@ class AppController:
         self._session: RecordingSession | None = None
         self._busy = False
         self._authorizing_grok = False
+        self._grok_authorized = True
         self._error: str | None = None
         self._hermes_error: str | None = None
         self._hotkey: GlobalHotkey | None = None
         self._hotkey_text = ""
+        self._sketch_lock = threading.RLock()
+        self._sketch: LiveSketch | None = None
+        self._sketch_busy = False
+        self._sketch_hotkey: GlobalHotkey | None = None
+        self._sketch_hotkey_text = ""
         self._unfinished: list[SessionFiles] = []
 
     def attach(self, ui: Ui) -> None:
@@ -59,17 +71,21 @@ class AppController:
             self.notify(title, message)
         self._hermes.start()
         threading.Thread(target=import_litellm, name="litellm-preload", daemon=True).start()
+        self._check_grok_authorization_in_background()
         self._register_hotkey(self.config.hotkey)
+        self._register_sketch_hotkey(self.config.sketch.hotkey)
         self._restore_outboxes()
         self._scan_unfinished(announce=True)
         self._refresh()
 
     def shutdown(self) -> None:
+        self._stop_sketch()
         with self._lock:
             session, self._session = self._session, None
         if session is not None:
             self._stop_session(session)
         self._unregister_hotkey()
+        self._unregister_sketch_hotkey()
         self._hermes.close()
         self._audio.close()
 
@@ -109,8 +125,24 @@ class AppController:
         return self._authorizing_grok
 
     @property
+    def needs_grok_authorization(self) -> bool:
+        return self.grok_auth_enabled and not self._grok_authorized
+
+    @property
     def hotkey_label(self) -> str:
-        return "+".join(part.capitalize() for part in self._hotkey_text.split("+")) if self._hotkey else ""
+        return _hotkey_label(self._hotkey_text) if self._hotkey else ""
+
+    @property
+    def is_sketching(self) -> bool:
+        return self._sketch is not None
+
+    @property
+    def is_sketch_busy(self) -> bool:
+        return self._sketch_busy
+
+    @property
+    def sketch_hotkey_label(self) -> str:
+        return _hotkey_label(self._sketch_hotkey_text) if self._sketch_hotkey else ""
 
     @property
     def unfinished_count(self) -> int:
@@ -156,6 +188,16 @@ class AppController:
             raise ControlError("Stopping the recording failed. The live .jsonl transcript is kept.")
         return transcript
 
+    def toggle_sketch(self) -> None:
+        """Switch live sketch on or off; it never starts, stops or changes a recording."""
+        with self._sketch_lock:
+            if self._sketch_busy:
+                return
+            self._sketch_busy = True
+        self._refresh()
+        worker = self._stop_sketch_worker if self._sketch is not None else self._start_sketch_worker
+        threading.Thread(target=worker, name="sketch-control", daemon=True).start()
+
     def select_mic(self, name: str | None) -> None:
         self._save(("devices", "mic"), name)
 
@@ -183,9 +225,16 @@ class AppController:
         self._refresh()
         threading.Thread(target=self._authorize_grok_worker, name="grok-auth", daemon=True).start()
 
+    def check_grok_authorization(self) -> None:
+        """Re-check the saved Grok authorization for the menu. Blocks while an expired token is refreshed."""
+        if not self.grok_auth_enabled:
+            return
+        self._grok_authorized = grok_authorized()
+        self._refresh()
+
     def refresh_devices(self) -> None:
-        if self.is_recording or self._busy:
-            self.notify("Stop recording first", "Devices can only be refreshed between recordings.")
+        if self.is_recording or self._busy or self.is_sketching:
+            self.notify("Devices are in use", "Stop recording and live sketch to refresh the devices.")
             return
         self._audio.refresh()
         self.notify("Devices refreshed", f"{len(self.microphones())} microphones, {len(self.outputs())} outputs.")
@@ -210,6 +259,13 @@ class AppController:
         folder.mkdir(parents=True, exist_ok=True)
         os.startfile(folder)
 
+    def open_diagrams(self) -> None:
+        """Open the running live sketch's folder, otherwise the folder holding every live sketch's diagrams."""
+        sketch = self._sketch
+        folder = sketch.folder if sketch is not None else self.config.output_path() / DIAGRAMS_FOLDER
+        folder.mkdir(parents=True, exist_ok=True)
+        os.startfile(folder)
+
     def open_config(self) -> None:
         try:
             os.startfile(self._configs.path)
@@ -226,6 +282,7 @@ class AppController:
             return
         self._error = None
         self._apply(config)
+        self._check_grok_authorization_in_background()
         self.notify("Config reloaded", "Changes apply to the next recording.")
         self._refresh()
 
@@ -269,6 +326,7 @@ class AppController:
         self._refresh()
 
     def _start_worker(self) -> RecordingSession | None:
+        self.check_grok_authorization()
         session = RecordingSession(self.config, self._audio, self._hermes, self.notify, self._source_lost)
         try:
             with com_initialized():
@@ -281,6 +339,9 @@ class AppController:
             return None
         self._error = None
         self._finish_transition(session)
+        with self._sketch_lock, com_initialized():
+            if self._sketch is not None:
+                self._sketch.recording_started(session)
         self.notify("Recording started", PRIVACY_REMINDER)
         return session
 
@@ -289,9 +350,52 @@ class AppController:
         transcript = None
         if session is not None:
             with com_initialized():
+                with self._sketch_lock:
+                    if self._sketch is not None:
+                        self._sketch.recording_stopping()
                 transcript = self._stop_session(session)
         self._finish_transition(None)
         return transcript
+
+    def _start_sketch_worker(self) -> None:
+        with self._sketch_lock:
+            sketch = LiveSketch(self.config, self._audio, self.notify, on_closed=self._sketch_window_closed)
+            recording = self._session if not self._busy else None
+            try:
+                with com_initialized():
+                    sketch.start(recording)
+            except Exception as exc:
+                log.exception("Live sketch could not start")
+                self.notify("Live sketch could not start", str(exc))
+            else:
+                self._sketch = sketch
+                self.notify("Live sketch on", f"Explain what you want drawn. Diagrams are saved in {sketch.folder}")
+            finally:
+                self._sketch_busy = False
+        self._refresh()
+
+    def _stop_sketch_worker(self) -> None:
+        self._stop_sketch()
+        with self._sketch_lock:
+            self._sketch_busy = False
+        self._refresh()
+
+    def _stop_sketch(self) -> None:
+        with self._sketch_lock:
+            sketch, self._sketch = self._sketch, None
+        if sketch is None:
+            return
+        try:
+            with com_initialized():
+                sketch.stop()
+        except Exception:
+            log.exception("Stopping live sketch failed")
+        self.notify("Live sketch off", f"Diagrams are saved in {sketch.folder}")
+
+    def _sketch_window_closed(self) -> None:
+        """The user closed the window: live sketch switches off, as with the hotkey."""
+        if self._sketch is not None:
+            self.toggle_sketch()
 
     def _stop_session(self, session: RecordingSession) -> Path | None:
         try:
@@ -313,7 +417,11 @@ class AppController:
             self.notify("Grok authorized", "xAI transcription models now use your Grok account.")
         finally:
             self._authorizing_grok = False
+            self.check_grok_authorization()
             self._refresh()
+
+    def _check_grok_authorization_in_background(self) -> None:
+        threading.Thread(target=self.check_grok_authorization, name="grok-auth-check", daemon=True).start()
 
     def _finish_transition(self, session: RecordingSession | None) -> None:
         with self._lock:
@@ -346,23 +454,38 @@ class AppController:
         if config.hotkey != self._hotkey_text:
             self._unregister_hotkey()
             self._register_hotkey(config.hotkey)
+        if config.sketch.hotkey != self._sketch_hotkey_text:
+            self._unregister_sketch_hotkey()
+            self._register_sketch_hotkey(config.sketch.hotkey)
 
     def _register_hotkey(self, text: str) -> None:
         self._hotkey_text = text
-        if not text:
-            return
-        hotkey = GlobalHotkey(parse_hotkey(text), self.toggle_recording)
-        try:
-            hotkey.start()
-        except HotkeyError as exc:
-            self.notify("Hotkey not available", f"{text}: {exc}")
-            return
-        self._hotkey = hotkey
+        self._hotkey = self._start_hotkey(text, self.toggle_recording)
 
     def _unregister_hotkey(self) -> None:
         if self._hotkey is not None:
             self._hotkey.stop()
             self._hotkey = None
+
+    def _register_sketch_hotkey(self, text: str) -> None:
+        self._sketch_hotkey_text = text
+        self._sketch_hotkey = self._start_hotkey(text, self.toggle_sketch)
+
+    def _unregister_sketch_hotkey(self) -> None:
+        if self._sketch_hotkey is not None:
+            self._sketch_hotkey.stop()
+            self._sketch_hotkey = None
+
+    def _start_hotkey(self, text: str, action: Callable[[], None]) -> GlobalHotkey | None:
+        if not text:
+            return None
+        hotkey = GlobalHotkey(parse_hotkey(text), action)
+        try:
+            hotkey.start()
+        except HotkeyError as exc:
+            self.notify("Hotkey not available", f"{text}: {exc}")
+            return None
+        return hotkey
 
     def _restore_outboxes(self) -> None:
         restored = self._hermes.restore(find_outboxes(self.config.output_path()))

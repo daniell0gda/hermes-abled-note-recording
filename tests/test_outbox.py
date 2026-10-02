@@ -20,7 +20,7 @@ from listening_app.hermes_client import (
 from listening_app.models import HermesStatus, SegmentStatus, Source, TranscriptSegment
 
 SESSION = "2026-09-28T10-13-40_a1b2"
-SETTINGS = HermesSettings("http://hermes.test/v1", "key", PayloadMode.RAW, "hermes-agent", "", 1)
+SETTINGS = HermesSettings("http://hermes.test/v1", "key", PayloadMode.RAW, "hermes-agent", "", 1, "")
 
 
 def segment(seq: int) -> TranscriptSegment:

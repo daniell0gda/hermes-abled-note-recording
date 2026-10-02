@@ -1,3 +1,5 @@
+import json
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -5,7 +7,10 @@ import pytest
 
 from listening_app import transcriber
 from listening_app.config import AppConfig, Language
-from listening_app.transcriber import GrokAuthError, SttSettings, grok_access_token, litellm_transcribe
+from listening_app.transcriber import GrokAuthError, SttSettings, grok_access_token, grok_authorized, litellm_transcribe
+from tests.test_notifications import controller_with
+
+GROK_AUTH_CONFIG = "providers:\n  xai:\n    grok_auth: true\n"
 
 def grok_config(selected: str) -> AppConfig:
     return AppConfig.model_validate({"stt": {"selected": selected}, "providers": {"xai": {"grok_auth": True}}})
@@ -48,3 +53,55 @@ def test_missing_authorization_points_to_the_tray_menu(tmp_path: Path, monkeypat
 
     with pytest.raises(GrokAuthError, match="Authorize Grok"):
         grok_access_token()
+
+
+def use_token_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    token_dir = tmp_path / "xai_oauth"
+    token_dir.mkdir()
+    monkeypatch.setenv("XAI_OAUTH_TOKEN_DIR", str(token_dir))
+    return token_dir
+
+
+def save_unexpired_authorization(token_dir: Path) -> None:
+    record = {"access_token": "access", "refresh_token": "refresh", "expires_at": time.time() + 3600}
+    (token_dir / "auth.json").write_text(json.dumps(record), encoding="utf-8")
+
+
+def test_a_saved_unexpired_authorization_is_valid(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    save_unexpired_authorization(use_token_dir(tmp_path, monkeypatch))
+
+    assert grok_authorized()
+
+
+def test_a_missing_authorization_is_not_valid(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    use_token_dir(tmp_path, monkeypatch)
+
+    assert not grok_authorized()
+
+
+def test_the_menu_flags_a_missing_grok_authorization(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    use_token_dir(tmp_path, monkeypatch)
+    controller, _ = controller_with(tmp_path, monkeypatch, GROK_AUTH_CONFIG)
+
+    controller.check_grok_authorization()
+
+    assert controller.needs_grok_authorization
+
+
+def test_the_menu_does_not_flag_a_valid_grok_authorization(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    save_unexpired_authorization(use_token_dir(tmp_path, monkeypatch))
+    controller, _ = controller_with(tmp_path, monkeypatch, GROK_AUTH_CONFIG)
+
+    controller.check_grok_authorization()
+
+    assert not controller.needs_grok_authorization
+
+
+def test_the_grok_authorization_is_not_flagged_when_grok_auth_is_off(tmp_path: Path,
+                                                                     monkeypatch: pytest.MonkeyPatch) -> None:
+    use_token_dir(tmp_path, monkeypatch)
+    controller, _ = controller_with(tmp_path, monkeypatch, "language: pl\n")
+
+    controller.check_grok_authorization()
+
+    assert not controller.needs_grok_authorization

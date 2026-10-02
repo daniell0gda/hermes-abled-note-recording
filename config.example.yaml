@@ -41,6 +41,16 @@ hermes:
   payload_mode: responses     # responses | chat | raw
   model: ""                   # "" = profile name from the URL (/p/<profile>/), else hermes-agent
   raw_path: ""                # payload_mode=raw only: path appended to url ("" = post to url itself)
+  system_prompt: ""           # payload_mode=chat only: system message sent with every event; {session_id} is replaced
   timeout_s: 30
   chunk_kb: 4                 # send transcript portions in chunks of at least this many KB; 0 = each portion on its own
   send_session_events: true
+
+sketch:                       # live sketch: draws what you explain (microphone only) as a diagram
+  hotkey: "ctrl+alt+d"        # global on/off hotkey, independent of recording; "" disables it
+  jev_model: jev-latest       # TypeSafe model that routes segments and picks element styles
+  api_key: ""                 # TypeSafe key; TYPESAFE_API_KEY overrides this. Missing = the drawing model also routes
+  draw_model: xai/grok-4-fast-non-reasoning   # litellm chat model; key as for transcription models (providers.*)
+  label_language: auto        # auto (= spoken language) | pl | en
+  point_radius_px: 24         # mouse held within this radius ...
+  point_window_s: 2           # ... for this long points at the element under it

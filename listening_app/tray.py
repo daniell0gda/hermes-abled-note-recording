@@ -74,7 +74,8 @@ class TrayApp:
     def _tooltip(self) -> str:
         controller = self._controller
         state = "Recording" if controller.is_recording else "Idle"
-        return f"{APP_TITLE} - {state}" + (f" - {controller.error}" if controller.error else "")
+        sketch = " - Live sketch" if controller.is_sketching else ""
+        return f"{APP_TITLE} - {state}{sketch}" + (f" - {controller.error}" if controller.error else "")
 
     def _record_label(self) -> str:
         controller = self._controller
@@ -83,10 +84,20 @@ class TrayApp:
         label = "Stop recording" if controller.is_recording else "Start recording"
         return f"{label}\t{controller.hotkey_label}" if controller.hotkey_label else label
 
+    def _sketch_label(self) -> str:
+        controller = self._controller
+        label = "Working..." if controller.is_sketch_busy else "Live sketch"
+        return f"{label}\t{controller.sketch_hotkey_label}" if controller.sketch_hotkey_label else label
+
+    def _authorize_grok_label(self) -> str:
+        return "Authorize Grok  !" if self._controller.needs_grok_authorization else "Authorize Grok"
+
     def _menu_items(self) -> Iterator[pystray.MenuItem]:
         controller = self._controller
         devices = controller.config.devices
         yield Item(self._record_label(), _safe(controller.toggle_recording), default=True, enabled=not controller.is_busy)
+        yield Item(self._sketch_label(), _safe(controller.toggle_sketch), checked=lambda _: controller.is_sketching,
+                   enabled=not controller.is_sketch_busy)
         yield Menu.SEPARATOR
         yield Item("Microphone", Menu(*self._device_items(
             controller.microphones(), devices.mic, controller.default_mic_name(), controller.select_mic)))
@@ -94,16 +105,18 @@ class TrayApp:
             controller.outputs(), devices.output, controller.default_output_name(), controller.select_output)))
         yield Item("Transcription model", Menu(*self._model_items()))
         if controller.grok_auth_enabled:
-            yield Item("Authorize Grok", _safe(controller.authorize_grok), enabled=not controller.is_authorizing_grok)
+            yield Item(self._authorize_grok_label(), _safe(controller.authorize_grok),
+                       enabled=not controller.is_authorizing_grok)
         yield Item("Hermes streaming", _safe(controller.toggle_hermes), checked=lambda _: controller.hermes_enabled)
         yield Item("Hermes endpoint", Menu(*self._payload_mode_items()))
         yield Menu.SEPARATOR
         yield Item("Refresh devices", _safe(controller.refresh_devices),
-                   enabled=not (controller.is_recording or controller.is_busy))
+                   enabled=not (controller.is_recording or controller.is_busy or controller.is_sketching))
         if controller.unfinished_count:
             yield Item(f"Finalize unfinished sessions ({controller.unfinished_count})",
                        _safe(controller.finalize_unfinished), enabled=not controller.is_busy)
         yield Item("Open transcripts folder", _safe(controller.open_transcripts))
+        yield Item("Open diagrams folder", _safe(controller.open_diagrams))
         yield Item("Open config file", _safe(controller.open_config))
         yield Item("Reload config", _safe(controller.reload_config))
         yield Menu.SEPARATOR

@@ -57,6 +57,13 @@ def finalize(files: SessionFiles) -> Path:
     return finalize_session(files, delivery_statuses(files.outbox))
 
 
+def to_captured_segment(seq: int, source: Source, source_index: int, speech: SpeechSegment,
+                        started_at: datetime) -> CapturedSegment:
+    """A segmenter result with its times in seconds since `started_at` and its wall-clock start."""
+    start, end = speech.start_sample / SAMPLE_RATE, speech.end_sample / SAMPLE_RATE
+    return CapturedSegment(seq, source, source_index, start, end, started_at + timedelta(seconds=start), speech.audio)
+
+
 class RecordingSession:
     """One recording, from Start to Stop. Built from a config snapshot, so config changes wait for the next one."""
 
@@ -84,6 +91,14 @@ class RecordingSession:
         self._stt_failure_reported = False
         self._store: TranscriptStore | None = None
         self._transcriber: Transcriber | None = None
+        self._listener: Callable[[Transcription], None] | None = None
+
+    def listen(self, handler: Callable[[Transcription], None] | None) -> None:
+        """Also hand every transcription to `handler` once it is stored and sent; None stops it.
+
+        A failing handler is logged and never affects the recording.
+        """
+        self._listener = handler
 
     def start(self) -> None:
         if self._stt.grok_auth:
@@ -189,9 +204,7 @@ class RecordingSession:
             return
         with self._seq_lock:
             seq = next(self._seq)
-        start, end = speech.start_sample / SAMPLE_RATE, speech.end_sample / SAMPLE_RATE
-        wall_start = self._started_at + timedelta(seconds=start)
-        segment = CapturedSegment(seq, source, next(self._source_index[source]), start, end, wall_start, speech.audio)
+        segment = to_captured_segment(seq, source, next(self._source_index[source]), speech, self._started_at)
         self._transcriber.submit(segment)
 
     def _on_transcribed(self, transcription: Transcription) -> None:
@@ -216,6 +229,16 @@ class RecordingSession:
         if send:
             self._start_hermes_session()
             self._send_chunk(self._chunks.add(record))
+        self._hand_to_listener(transcription)
+
+    def _hand_to_listener(self, transcription: Transcription) -> None:
+        listener = self._listener
+        if listener is None:
+            return
+        try:
+            listener(transcription)
+        except Exception:
+            log.exception("The transcription listener failed on seq %d", transcription.segment.seq)
 
     def _send_chunk(self, segments: list[TranscriptSegment]) -> None:
         if segments:

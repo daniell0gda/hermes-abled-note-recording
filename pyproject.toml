@@ -20,6 +20,7 @@ dependencies = [
     "ruamel.yaml>=0.18",
     "pydantic>=2.6",
     "mcp>=2.2",
+    "pywebview>=6.0",
 ]
 
 [project.optional-dependencies]
@@ -29,10 +30,10 @@ dev = ["pytest>=8", "mypy>=1.10", "pyinstaller>=6.5"]
 listening-app = "listening_app.main:main"
 
 [tool.setuptools]
-packages = ["listening_app"]
+packages = ["listening_app", "listening_app.sketch"]
 
 [tool.setuptools.package-data]
-listening_app = ["assets/*"]
+listening_app = ["assets/*", "assets/sketch/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

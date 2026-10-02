@@ -80,6 +80,24 @@ def grok_access_token() -> str:
         raise GrokAuthError(GROK_NOT_AUTHORIZED) from exc
 
 
+def grok_api_base() -> str:
+    """Base URL for chat completions made with the Grok account's access token."""
+    import_litellm()
+    from litellm.llms.xai.oauth import XAIOAuthAuthenticator
+
+    return str(XAIOAuthAuthenticator().get_api_base())
+
+
+def grok_authorized() -> bool:
+    """Whether the saved Grok authorization still gives an access token, refreshing an expired one first."""
+    try:
+        grok_access_token()
+    except Exception as exc:
+        log.warning("Grok authorization is not usable: %s", exc)
+        return False
+    return True
+
+
 def litellm_transcribe(wav: bytes, settings: SttSettings) -> str:
     litellm = import_litellm()
     # drop_params: providers without glossary support (xAI) would otherwise reject the prompt

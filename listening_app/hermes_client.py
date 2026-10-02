@@ -29,6 +29,7 @@ _PROFILE_PATTERN = re.compile(r"/p/([^/]+)/")
 _DEFAULT_PROFILE = "default"
 _CLOSE_TIMEOUT_S = 2.0
 _PORTION_FIELDS = {"seq", "source", "start", "end", "wall_start", "text", "language"}
+_SESSION_ID_PLACEHOLDER = "{session_id}"
 
 
 class EventKind(StrEnum):
@@ -107,12 +108,13 @@ class HermesSettings:
     model: str
     raw_path: str
     timeout_s: float
+    system_prompt: str
 
     @classmethod
     def from_config(cls, config: AppConfig) -> "HermesSettings":
         hermes = config.hermes
         return cls(hermes.url, config.hermes_key().value, hermes.payload_mode, hermes.model or model_from_url(hermes.url),
-                   hermes.raw_path, hermes.timeout_s)
+                   hermes.raw_path, hermes.timeout_s, hermes.system_prompt)
 
 
 def model_from_url(url: str) -> str:
@@ -143,13 +145,20 @@ def _raw_request(event: HermesEvent, settings: HermesSettings, headers: dict[str
 
 
 def _chat_request(event: HermesEvent, settings: HermesSettings, headers: dict[str, str]) -> HttpRequest:
+    """Stateless: without an X-Hermes-Session-Id header Hermes keeps no history, so earlier events are never re-read."""
     body = {
         "model": settings.model,
-        "messages": [{"role": "user", "content": _as_message(event)}],
+        "messages": [*_system_messages(event, settings), {"role": "user", "content": _as_message(event)}],
         "stream": False,
         "metadata": _metadata(event),
     }
-    return HttpRequest(f"{settings.url}/chat/completions", {**headers, "X-Hermes-Session-Id": event.session_id}, body)
+    return HttpRequest(f"{settings.url}/chat/completions", headers, body)
+
+
+def _system_messages(event: HermesEvent, settings: HermesSettings) -> list[dict[str, str]]:
+    if not settings.system_prompt:
+        return []
+    return [{"role": "system", "content": settings.system_prompt.replace(_SESSION_ID_PLACEHOLDER, event.session_id)}]
 
 
 def _responses_request(event: HermesEvent, settings: HermesSettings, headers: dict[str, str]) -> HttpRequest:

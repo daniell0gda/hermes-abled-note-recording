@@ -37,6 +37,7 @@ Set keys as environment variables (preferred) or in `config.yaml`. **The environ
 | OpenAI STT | `OPENAI_API_KEY` | `providers.openai.api_key` |
 | Any other litellm provider `<p>/…` | `<P>_API_KEY` | `providers.<p>.api_key` |
 | Hermes | `HERMES_API_KEY` | `hermes.api_key` |
+| TypeSafe Jev (live sketch) | `TYPESAFE_API_KEY` | `sketch.api_key` |
 
 ```powershell
 [Environment]::SetEnvironmentVariable('GROQ_API_KEY', 'gsk_...', 'User')
@@ -47,7 +48,9 @@ Set keys as environment variables (preferred) or in `config.yaml`. **The environ
 **Authorize Grok**. It opens the xAI sign-in page in your browser. After you sign in, `xai/…` models
 (e.g. `xai/grok-voice-transcribe-2.0`) use your Grok account, and `XAI_API_KEY` is ignored. The tokens
 are saved by litellm in `%USERPROFILE%\.config\litellm\xai_oauth\auth.json` and refreshed automatically.
-Recording does not start until Grok is authorized.
+Recording does not start until Grok is authorized. The menu shows **Authorize Grok  !** when the saved
+authorization is missing or can no longer be refreshed; it is checked at startup, after authorizing, on
+**Reload config** and when a recording starts.
 
 ## Configuration
 
@@ -69,6 +72,11 @@ All options are documented in [`config.example.yaml`](config.example.yaml). The 
 | `stt.prompt` | `""` | glossary for STT: names, project terms |
 | `hermes.payload_mode` | `responses` | `responses`, `chat` or `raw` (see below) |
 | `hermes.chunk_kb` | `4` | send transcript portions in chunks of at least this many KB; `0` = one by one |
+| `hermes.system_prompt` | `""` | `chat` mode: system message sent with every event; `{session_id}` is replaced |
+| `sketch.hotkey` | `ctrl+alt+d` | live sketch on/off; `""` disables it |
+| `sketch.draw_model` | `xai/grok-4-fast-non-reasoning` | litellm chat model that draws; its key works like an STT provider key |
+| `sketch.label_language` | `auto` | `auto` (spoken language), `pl` or `en` |
+| `sketch.point_radius_px`, `sketch.point_window_s` | `24`, `2` | how still and how long the mouse must rest to point at an element |
 
 - **Tray selections** (devices, model, Hermes on/off, Hermes endpoint) are saved to the file immediately, and your
   comments in it are preserved.
@@ -78,10 +86,10 @@ All options are documented in [`config.example.yaml`](config.example.yaml). The 
 
 ## Using it
 
-Tray menu: Start/Stop recording (also a left click, or the hotkey), Microphone ▸, Audio output ▸,
+Tray menu: Start/Stop recording (also a left click, or the hotkey), Live sketch (on/off), Microphone ▸, Audio output ▸,
 Transcription model ▸, Authorize Grok (only with `providers.xai.grok_auth: true`), Hermes streaming on/off,
 Hermes endpoint ▸ (`/responses`, `/chat/completions` or raw), Refresh devices, Finalize unfinished sessions (only shown
-when there are any), Open transcripts folder, Open config file, Reload config, Quit.
+when there are any), Open transcripts folder, Open diagrams folder, Open config file, Reload config, Quit.
 
 Icon: **grey** idle, **red** recording, **yellow "!"** error (a yellow badge while recording). Hover for
 details. Notifications are shown on start, on stop and on problems, unless `notifications: false`. That
@@ -92,6 +100,32 @@ ends up duplicated in the "me" track.
 
 If a saved device is missing, the system default is used and you get a notification. If a device is
 unplugged mid-meeting, that track stops cleanly and the other one keeps recording.
+
+### Live sketch
+
+While you explain something, what you describe is drawn as a diagram in a window: components, steps,
+states and how they connect. Switch it on with **Ctrl+Alt+D** (`sketch.hotkey`) or **Live sketch** in the tray.
+
+- It works on its own (only your microphone is transcribed; nothing is stored as a transcript and nothing
+  goes to Hermes) or during a recording (it then reuses the recording's microphone transcription). Switching
+  it on or off never starts, stops or changes a recording.
+- Each segment you say is routed by TypeSafe Jev (`TYPESAFE_API_KEY`) to the right diagram, then the drawing
+  model (`sketch.draw_model`, by default Grok through the tray's Grok authorization) rewrites that diagram, and
+  Jev picks shapes (service, database, queue, cache, actor, ...) for the new elements. Updates appear about
+  1–2 s after you finish a sentence. Without a TypeSafe key the drawing model also routes, which is slower.
+- "Let's start a new diagram for ..." opens a new tab; "back to diagram 1" or "back to the login flow" returns
+  to one. Clicking a tab does the same.
+- **Pointing:** rest the mouse on an element for 2 s and it is lightly highlighted; "this one" or "here" in what
+  you say then means that element. **Selecting:** click elements to select them (solid outline), click empty
+  space to clear; the drawing model sees the selection.
+- **Mic on / off** in the window shows whether live sketch is listening (a blinking red dot) and toggles it. Off
+  only stops live sketch hearing you; a running recording keeps recording.
+- Every diagram is saved, and rewritten on each update, as a self-contained HTML file:
+  `output_dir\diagrams\<sketch id>\NN-<title>.html`. **Copy path** in the window copies the shown diagram's file
+  path; **Open diagrams folder** in the tray opens the running sketch's folder, or `output_dir\diagrams`.
+- Closing the window switches live sketch off. If an answer cannot be drawn, the last good diagram stays and
+  "Update skipped" is shown; the same lines are retried with the next ones.
+- v1 is tuned for English speech. Not yet available in the headless MCP mode.
 
 ### Command-line tools
 
@@ -201,7 +235,7 @@ in the tray. The change applies immediately, including to portions still queued:
 | Mode | Request |
 |---|---|
 | `responses` (default) | `POST {url}/responses` with `input` = event JSON, `conversation` = session_id (the whole meeting is one Hermes conversation), `store: true`, `background: true` (returns without waiting for the agent turn) |
-| `chat` | `POST {url}/chat/completions` with the event JSON as one user message, header `X-Hermes-Session-Id: <session_id>` |
+| `chat` | `POST {url}/chat/completions` with `hermes.system_prompt` (if set, `{session_id}` replaced) as the system message and the event JSON as the only user message. Stateless: no `X-Hermes-Session-Id`, so Hermes keeps no history and never re-reads earlier events |
 | `raw` | `POST {url}/{raw_path}` with the event JSON itself |
 
 `hermes.model` defaults to the profile name in the URL (`/p/<profile>/v1`), otherwise `hermes-agent`.
@@ -216,10 +250,11 @@ Hermes replies are only logged (at DEBUG).
 ## Build the exe
 
 ```powershell
-.\build.ps1        # -> dist\ListeningApp.exe (+ dist\config.example.yaml)
+.\build.ps1        # -> dist\ListeningApp\ (ListeningApp.exe, _internal\, config.example.yaml)
 ```
 
-To deploy, copy `ListeningApp.exe` and a filled-in `config.yaml` to one folder.
+To deploy, copy the whole `dist\ListeningApp` folder and put a filled-in `config.yaml` next to `ListeningApp.exe`.
+The exe needs its `_internal` folder beside it; it is not unpacked on every start, so the app starts quickly.
 
 **Autostart:** press Win+R, type `shell:startup`, and create a shortcut to `ListeningApp.exe` in the
 folder that opens.
@@ -245,6 +280,7 @@ folder that opens.
 | `transcript_store.py` | JSONL, final JSON, crash recovery |
 | `hermes_client.py` | payload builders, outbox, ordered retrying sender |
 | `config.py` | pydantic models, YAML load/save, env overrides |
+| `sketch/` | live sketch: `pipeline.py` (route → draw → style), `jev_client.py`, `drawer.py`, `structure.py` (line format), `diagrams.py`, `pointing.py`, `feed.py` / `microphone.py` (what it hears), `window.py` / `window_app.py` (pywebview window process), `export.py` (HTML files), `controller.py` |
 
 Implementation notes:
 
@@ -252,6 +288,9 @@ Implementation notes:
   `silero_vad.LICENSE`). This avoids PyTorch and keeps the exe small.
 - `ruamel.yaml` is used instead of PyYAML so that saving tray selections keeps the comments in
   `config.yaml`.
+- The live sketch window runs as a second process (`--sketch-window`), because pywebview needs the main thread
+  that the tray already uses. It talks to the app over stdin/stdout in JSON lines. Layout is done by dagre
+  (MIT, `assets/sketch/dagre.LICENSE`) in the page; the shapes follow the diagram-design style guide.
 - WASAPI loopback delivers no frames while nothing plays. The loopback track is padded with silence
   against the clock, so pauses still end segments and timestamps don't drift.
 

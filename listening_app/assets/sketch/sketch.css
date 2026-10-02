@@ -1,0 +1,125 @@
+:root {
+  --paper: #f5f5f5;
+  --paper-2: #ececec;
+  --ink: #2d3142;
+  --muted: #4f5d75;
+  --soft: #7a8399;
+  --rule: rgba(45, 49, 66, 0.12);
+  --accent: #eb6c36;
+  --accent-tint: rgba(235, 108, 54, 0.08);
+  --link: #2e5aa8;
+  --node: #ffffff;
+  --store: rgba(45, 49, 66, 0.05);
+  --external: rgba(45, 49, 66, 0.03);
+  --external-stroke: rgba(45, 49, 66, 0.30);
+  --input: rgba(79, 93, 117, 0.10);
+  --zone: rgba(45, 49, 66, 0.02);
+  --zone-stroke: rgba(45, 49, 66, 0.10);
+  --zone-label: rgba(45, 49, 66, 0.40);
+  --lifeline: rgba(45, 49, 66, 0.20);
+  --point: rgba(46, 90, 168, 0.12);
+  --sans: "Geist", "Segoe UI", system-ui, sans-serif;
+  --mono: "Geist Mono", "Cascadia Mono", Consolas, monospace;
+  --serif: "Instrument Serif", Georgia, serif;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #2d3142;
+    --paper-2: #393e53;
+    --ink: #f5f5f5;
+    --muted: #bfc0c0;
+    --soft: #8e98ac;
+    --rule: rgba(245, 245, 245, 0.12);
+    --accent: #f08a59;
+    --accent-tint: rgba(240, 138, 89, 0.10);
+    --link: #6a95d8;
+    --node: #393e53;
+    --store: rgba(245, 245, 245, 0.05);
+    --external: rgba(245, 245, 245, 0.03);
+    --external-stroke: rgba(245, 245, 245, 0.30);
+    --input: rgba(191, 192, 192, 0.10);
+    --zone: rgba(245, 245, 245, 0.02);
+    --zone-stroke: rgba(245, 245, 245, 0.10);
+    --zone-label: rgba(245, 245, 245, 0.40);
+    --lifeline: rgba(245, 245, 245, 0.20);
+    --point: rgba(106, 149, 216, 0.18);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --paper: #2d3142;
+  --paper-2: #393e53;
+  --ink: #f5f5f5;
+  --muted: #bfc0c0;
+  --soft: #8e98ac;
+  --rule: rgba(245, 245, 245, 0.12);
+  --accent: #f08a59;
+  --accent-tint: rgba(240, 138, 89, 0.10);
+  --link: #6a95d8;
+  --node: #393e53;
+  --store: rgba(245, 245, 245, 0.05);
+  --external: rgba(245, 245, 245, 0.03);
+  --external-stroke: rgba(245, 245, 245, 0.30);
+  --input: rgba(191, 192, 192, 0.10);
+  --zone: rgba(245, 245, 245, 0.02);
+  --zone-stroke: rgba(245, 245, 245, 0.10);
+  --zone-label: rgba(245, 245, 245, 0.40);
+  --lifeline: rgba(245, 245, 245, 0.20);
+  --point: rgba(106, 149, 216, 0.18);
+  color-scheme: dark;
+}
+
+html, body { margin: 0; height: 100%; }
+body { background: var(--paper); color: var(--ink); font-family: var(--sans); }
+
+.sk-page { display: flex; flex-direction: column; height: 100%; }
+.sk-header { padding: 16px 24px 4px; }
+.sk-title { margin: 0; font: 400 1.75rem/1.2 var(--serif); }
+.sk-eyebrow-title { font: 500 8px var(--mono); letter-spacing: 0.18em; text-transform: uppercase; color: var(--soft); }
+.sk-canvas { flex: 1; min-height: 0; padding: 8px 16px 16px; }
+.sk-canvas svg { width: 100%; height: 100%; display: block; margin: 0 auto; }
+.sk-empty { font: italic 14px var(--serif); fill: var(--soft); }
+
+.sk-shape { fill: var(--node); stroke: var(--ink); stroke-width: 1; }
+.sk-detail { fill: none; stroke: var(--muted); stroke-width: 0.8; }
+.sk-label { font: 600 12px var(--sans); fill: var(--ink); }
+.sk-eyebrow { font: 500 7px var(--mono); letter-spacing: 0.18em; fill: var(--soft); }
+
+.sk-node[data-shape="database"] .sk-shape,
+.sk-node[data-shape="queue"] .sk-shape,
+.sk-node[data-shape="cache"] .sk-shape { fill: var(--store); stroke: var(--muted); }
+.sk-node[data-shape="external"] .sk-shape { fill: var(--external); stroke: var(--external-stroke); stroke-dasharray: 4 3; }
+.sk-node[data-shape="actor"] .sk-shape,
+.sk-node[data-shape="client"] .sk-shape { fill: var(--input); stroke: var(--soft); }
+.sk-node[data-shape="note"] .sk-shape { fill: var(--paper-2); stroke: var(--soft); stroke-width: 0.8; }
+.sk-node[data-shape="note"] .sk-label { font: italic 400 14px var(--serif); }
+.sk-node.is-focal .sk-shape { fill: var(--accent-tint); stroke: var(--accent); stroke-width: 1.2; }
+
+.sk-halo { fill: var(--point); stroke: none; opacity: 0; transition: opacity 120ms; }
+.sk-outline { fill: none; stroke: var(--link); stroke-width: 2; opacity: 0; }
+.is-pointed > .sk-halo { opacity: 1; }
+.is-selected > .sk-outline { opacity: 1; }
+
+.sk-edge path.sk-line { fill: none; stroke: var(--muted); stroke-width: 1.2; }
+.sk-edge[data-style="async"] path.sk-line { stroke-dasharray: 4 3; stroke-width: 1; }
+.sk-edge[data-style="data"] path.sk-line { stroke-width: 1; }
+.sk-edge[data-style="transition"] path.sk-line { stroke: var(--ink); stroke-width: 1; }
+.sk-edge[data-style="dependency"] path.sk-line { stroke: var(--soft); stroke-dasharray: 2 3; stroke-width: 1; }
+.sk-edge .sk-hit { fill: none; stroke: transparent; stroke-width: 12; }
+.sk-edge-label-bg { fill: var(--paper); }
+.sk-edge-label { font: 400 8px var(--mono); letter-spacing: 0.06em; fill: var(--muted); }
+.sk-edge.is-pointed .sk-edge-label-bg { fill: var(--point); }
+.sk-edge.is-selected path.sk-line { stroke: var(--link); stroke-width: 2; }
+
+.sk-marker-fill { fill: var(--muted); }
+.sk-marker-ink { fill: var(--ink); }
+.sk-marker-open { fill: none; stroke: var(--muted); stroke-width: 1.2; }
+.sk-marker-soft { fill: none; stroke: var(--soft); stroke-width: 1.2; }
+
+.sk-zone { fill: var(--zone); stroke: var(--zone-stroke); stroke-width: 0.8; }
+.sk-zone-label-bg { fill: var(--paper); }
+.sk-zone-label { font: 500 7px var(--mono); letter-spacing: 0.14em; fill: var(--zone-label); }
+.sk-lifeline { stroke: var(--lifeline); stroke-width: 1; stroke-dasharray: 3 3; }

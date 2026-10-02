@@ -10,7 +10,7 @@ from io import StringIO
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, field_validator, model_validator
 from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap
 from ruamel.yaml.error import YAMLError
@@ -21,6 +21,7 @@ from listening_app.files import atomic_write_text
 from listening_app.hotkey import parse_hotkey
 
 HERMES_KEY_ENV = "HERMES_API_KEY"
+TYPESAFE_KEY_ENV = "TYPESAFE_API_KEY"
 DEFAULT_PROVIDER = "openai"
 XAI_PROVIDER = "xai"
 
@@ -93,6 +94,7 @@ class HermesConfig(_Section):
     payload_mode: PayloadMode = PayloadMode.RESPONSES
     model: str = ""
     raw_path: str = ""
+    system_prompt: str = ""
     timeout_s: float = Field(default=30, gt=0)
     chunk_kb: int = Field(default=4, ge=0)
     send_session_events: bool = True
@@ -104,6 +106,28 @@ class HermesConfig(_Section):
         if value and not value.startswith(("http://", "https://")):
             raise ValueError("must start with http:// or https://")
         return value
+
+
+def _checked_hotkey(value: str) -> str:
+    value = value.strip()
+    if value:
+        parse_hotkey(value)
+    return value
+
+
+class SketchConfig(_Section):
+    hotkey: str = "ctrl+alt+d"
+    jev_model: str = "jev-latest"
+    api_key: SecretStr = SecretStr("")
+    draw_model: str = "xai/grok-4-fast-non-reasoning"
+    label_language: Language = Language.AUTO
+    point_radius_px: int = Field(default=24, ge=1)
+    point_window_s: float = Field(default=2, gt=0)
+
+    @field_validator("hotkey")
+    @classmethod
+    def _valid_hotkey(cls, value: str) -> str:
+        return _checked_hotkey(value)
 
 
 @dataclass(frozen=True)
@@ -124,14 +148,18 @@ class AppConfig(_Section):
     stt: SttConfig = SttConfig()
     providers: dict[str, ProviderConfig] = Field(default_factory=dict)
     hermes: HermesConfig = HermesConfig()
+    sketch: SketchConfig = SketchConfig()
 
     @field_validator("hotkey")
     @classmethod
     def _valid_hotkey(cls, value: str) -> str:
-        value = value.strip()
-        if value:
-            parse_hotkey(value)
-        return value
+        return _checked_hotkey(value)
+
+    @model_validator(mode="after")
+    def _distinct_hotkeys(self) -> "AppConfig":
+        if self.hotkey and self.sketch.hotkey and parse_hotkey(self.hotkey) == parse_hotkey(self.sketch.hotkey):
+            raise ValueError("sketch.hotkey must differ from hotkey")
+        return self
 
     @field_validator("providers")
     @classmethod
@@ -158,11 +186,18 @@ class AppConfig(_Section):
     def hermes_key(self) -> ApiKey:
         return resolve_key(HERMES_KEY_ENV, self.hermes.api_key)
 
+    def jev_key(self) -> ApiKey:
+        return resolve_key(TYPESAFE_KEY_ENV, self.sketch.api_key)
+
+    def draw_key(self) -> ApiKey:
+        """Key of the live sketch drawing model, resolved like a transcription model's provider key."""
+        return self.stt_key(self.sketch.draw_model)
+
     def secret_values(self) -> list[str]:
         """Every API key in effect, so logging can redact them."""
         keys = [resolve_key(env_var_for(name), provider.api_key) for name, provider in self.providers.items()]
         keys += [self.stt_key(model) for model in self.stt.choices()]
-        keys.append(self.hermes_key())
+        keys += [self.hermes_key(), self.jev_key(), self.draw_key()]
         return sorted({key.value for key in keys if key.value})
 
 
@@ -253,6 +288,8 @@ def describe(config: AppConfig) -> str:
     lines = [json.dumps(config.model_dump(mode="json"), indent=2, ensure_ascii=False), "", "API keys in effect:"]
     lines += [f"  {model}: {config.stt_key(model).source}" for model in config.stt.choices()]
     lines.append(f"  hermes: {config.hermes_key().source}")
+    lines.append(f"  sketch jev: {config.jev_key().source}")
+    lines.append(f"  sketch {config.sketch.draw_model}: {config.draw_key().source}")
     return "\n".join(lines)
 
 

@@ -1,0 +1,28 @@
+.sk-tabs { display: flex; gap: 4px; padding: 12px 16px 0; border-bottom: 1px solid var(--rule); overflow-x: auto; }
+.sk-tab {
+  font: 500 12px var(--sans); color: var(--muted); background: transparent; border: 1px solid transparent;
+  border-bottom: none; border-radius: 6px 6px 0 0; padding: 8px 14px; cursor: pointer; white-space: nowrap;
+}
+.sk-tab:hover { color: var(--ink); }
+.sk-tab[aria-selected="true"] { color: var(--ink); background: var(--paper-2); border-color: var(--rule); }
+.sk-tab-number { font: 500 10px var(--mono); color: var(--soft); margin-right: 6px; }
+.sk-notice {
+  position: fixed; right: 16px; bottom: 16px; font: 500 11px var(--mono); color: var(--muted); background: var(--paper-2);
+  border: 1px solid var(--rule); border-radius: 6px; padding: 8px 12px; opacity: 0; transition: opacity 200ms;
+  pointer-events: none;
+}
+.sk-notice.is-shown { opacity: 1; }
+.sk-canvas svg [data-id] { cursor: pointer; }
+:root { --live: #d93025; }
+.sk-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
+.sk-tools { display: flex; gap: 8px; flex-shrink: 0; }
+.sk-tool {
+  display: inline-flex; align-items: center; gap: 8px; font: 500 11px var(--mono); color: var(--muted);
+  background: var(--paper-2); border: 1px solid var(--rule); border-radius: 6px; padding: 6px 10px; cursor: pointer;
+}
+.sk-tool:hover:not(:disabled) { color: var(--ink); }
+.sk-tool:disabled { cursor: default; opacity: 0.5; }
+.sk-mic-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--soft); }
+.sk-tool[aria-pressed="true"] .sk-mic-dot { background: var(--live); animation: sk-blink 1.2s ease-in-out infinite; }
+@keyframes sk-blink { 50% { opacity: 0.15; } }
+.sk-warmup { position: absolute; width: 0; height: 0; overflow: hidden; }
