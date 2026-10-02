@@ -12,7 +12,7 @@ from listening_app.hermes_client import (
 )
 from listening_app.models import HermesStatus, SegmentStatus, Source, TranscriptSegment
 
-URL = "http://10.30.28.25:8642/p/simple-ng-proj/v1"
+URL = "http://localhost:8642/p/my-profile/v1"
 SEGMENT = TranscriptSegment(seq=12, source=Source.OTHERS, start=83.42, end=91.1,
                             wall_start="2026-09-28T10:15:03.420+02:00", text="No to ustalmy, że release idzie w piątek.",
                             language="pl", stt_model="groq/whisper-large-v3-turbo", status=SegmentStatus.OK,
@@ -51,7 +51,7 @@ def test_responses_mode_keeps_the_meeting_in_one_conversation() -> None:
 
     assert request.url == f"{URL}/responses"
     assert request.body["conversation"] == "2026-09-28T10-13-40_a1b2"
-    assert request.body["model"] == "simple-ng-proj"
+    assert request.body["model"] == "my-profile"
     assert request.body["background"] is True
     assert json.loads(request.body["input"])["portions"][0]["text"] == SEGMENT.text
 
@@ -80,7 +80,7 @@ def test_every_request_carries_auth_and_a_stable_idempotency_key() -> None:
 
 
 def test_model_defaults_to_the_profile_name() -> None:
-    assert model_from_url(URL) == "simple-ng-proj"
+    assert model_from_url(URL) == "my-profile"
     assert model_from_url("http://host:8642/v1") == "hermes-agent"
     assert model_from_url("http://host:8642/p/default/v1") == "hermes-agent"
 

@@ -36,7 +36,7 @@ providers:                    # env vars override these, e.g. GROQ_API_KEY, OPEN
 
 hermes:
   enabled: true
-  url: "http://10.30.28.25:8642/p/simple-ng-proj/v1"
+  url: "http://localhost:8642/p/my-profile/v1"
   api_key: ""                 # HERMES_API_KEY overrides this
   payload_mode: responses     # responses | chat | raw
   model: ""                   # "" = profile name from the URL (/p/<profile>/), else hermes-agent
