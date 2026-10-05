@@ -1,0 +1,69 @@
+# Live sketch - Bucket A / Bucket B (Jev clean rebuild)
+
+Branch `feature/sketch-jev-bucket`, forked from `feature/sketch-retrospect`.
+
+## Why
+
+Bucket A (live draw + post-draw Grok retrospect) only ever patches the graph it already has. With messy STT
+input the retrospect keeps the size and the junk (separate `workflow` / `team_box` nodes, stray
+`implementer utilities`, wrong checker loop, no `done`). Bucket B rebuilds from a clean source instead.
+
+## Two buckets
+
+| | Bucket A (live) | Bucket B (clean rebuild) |
+|---|---|---|
+| Input | each STT segment as it arrives | the diagram's whole transcript (+ rolling summary) |
+| Steps | Jev routes -> Grok draws the whole diagram -> Jev styles -> (retrospect) | Grok writes clean chronological prose -> split into chunks -> Jev judges each chunk one by one -> Grok draws chunk by chunk on an **empty** diagram -> Jev styles |
+| Thread | `sketch-route`, `sketch-draw` | `sketch-bucket-b` |
+| Visible | immediately; the speaker keeps talking | soft-swapped in when a rebuild finishes |
+
+Code: `listening_app/sketch/bucket_b.py` (`chunk_clean_text`, `rebuild_from_clean`), the clean prompt
+`Drawer.clean_transcript` in `drawer.py`, scheduling and swap in `pipeline.py` (`run_bucket_b`,
+`_swap_bucket_b`, `_bucket_b_loop`). Same draw model (`sketch.draw_model`) and Jev client as Bucket A.
+
+### Jev per chunk
+
+1. Kind: one Jev call on the whole clean text picks the diagram type (swimlane / nested / flow ...).
+2. Each chunk: Jev `structural` Noul (context: previous 3 chunks + summary of the rebuilt diagram).
+   Chunks without structure are skipped; structural chunks are drawn by Grok onto the rebuilt diagram, then
+   Jev styles the new elements.
+
+## Trigger
+
+- After every successful live draw, a diagram is armed for B when at least `sketch.bucket_b_min_new_lines`
+  (default 2) transcript lines arrived since the last B run.
+- B starts after a quiet spell of `bucket_b_debounce_s` (2 s) without new live draws, or at the latest
+  `bucket_b_max_wait_s` (10 s) after it was armed, so continuous talk still gets rebuilds.
+- One B run at a time; requests arriving meanwhile coalesce into the next run.
+
+## Swap (no button)
+
+- When a rebuild finishes and its generation is still current, the live diagram's structure, kind and styles
+  are replaced (`BucketB swap` in the log). Transcript, summary, tab and selection (of surviving ids) stay.
+- Stale results are dropped: `cancel_bucket_b()` and `stop()` bump the generation; an in-flight rebuild stops
+  at the next chunk and never swaps.
+- A live draw computed on the pre-swap diagram is not committed over the swap: its batch is re-queued and
+  redrawn on top of the clean diagram. A retrospect that overlapped a swap is dropped.
+- No apply button for now (Daniel, 2026-10-05).
+
+## Failure
+
+- No `TYPESAFE_API_KEY`: B is disabled (`BucketB disabled` warning), A works as before.
+- Jev or Grok error during a run: the run ends (`BucketB ... fail`), the live view stays; new lines re-arm B.
+
+## Config (`sketch:` section)
+
+```yaml
+sketch:
+  bucket_b: true
+  bucket_b_min_new_lines: 2
+  bucket_b_debounce_s: 2.0
+  bucket_b_max_wait_s: 10.0
+  # retrospect_every_n: 0   # optional: turn off Bucket A's retrospect and rely on B
+```
+
+## Log lines
+
+`BucketB start` -> `BucketB clean diagram N: C chars -> K chunks` -> `BucketB kind` ->
+`BucketB Jev chunk i/K ok` (or `fail`) -> `BucketB rebuild diagram N: n nodes, e edges` -> `BucketB swap`
+(or `BucketB drop ... outdated`, `BucketB cancel`).

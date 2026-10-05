@@ -8,10 +8,12 @@ import logging
 import re
 import queue
 import threading
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import Any, Protocol
 
+from listening_app.sketch.bucket_b import BucketBResult, rebuild_from_clean
 from listening_app.sketch.diagrams import Changes, Destination, Diagram, DiagramSet, EdgeStyle, NodeStyle, Overview
 from listening_app.sketch.drawer import Revision, RoutedDrawing, SpokenLine
 from listening_app.sketch.jev_client import JevError, Routing
@@ -26,6 +28,9 @@ SUMMARY_FOLD_LINES = 8
 STOP_TIMEOUT_S = 2.0
 DEFAULT_RETROSPECT_EVERY_N = 1
 DEFAULT_RETROSPECT_MAX_NODES = 9
+DEFAULT_BUCKET_B_MIN_NEW_LINES = 2
+DEFAULT_BUCKET_B_DEBOUNCE_S = 2.0
+DEFAULT_BUCKET_B_MAX_WAIT_S = 10.0
 
 Styles = tuple[dict[str, NodeStyle], dict[str, EdgeStyle]]
 
@@ -44,6 +49,8 @@ class Artist(Protocol):
     def summarize(self, diagram: Diagram, lines: list[str]) -> str: ...
 
     def retrospect(self, diagram: Diagram) -> Revision: ...
+
+    def clean_transcript(self, lines: list[str], summary: str = "") -> str: ...
 
 
 @dataclass(frozen=True)
@@ -75,7 +82,11 @@ class SketchPipeline:
     def __init__(self, drawer: Artist, judge: Judge | None, listener: SketchListener,
                  *, retrospect_every_n: int = DEFAULT_RETROSPECT_EVERY_N,
                  retrospect_max_nodes: int = DEFAULT_RETROSPECT_MAX_NODES,
-                 retrospect_on_correction: bool = False) -> None:
+                 retrospect_on_correction: bool = False,
+                 bucket_b: bool = False,
+                 bucket_b_min_new_lines: int = DEFAULT_BUCKET_B_MIN_NEW_LINES,
+                 bucket_b_debounce_s: float = DEFAULT_BUCKET_B_DEBOUNCE_S,
+                 bucket_b_max_wait_s: float = DEFAULT_BUCKET_B_MAX_WAIT_S) -> None:
         # retrospect_on_correction is ignored (kept for older call sites); keywords are not used.
         self._drawer = drawer
         self._judge = judge
@@ -93,11 +104,28 @@ class SketchPipeline:
         self._threads: list[threading.Thread] = []
         self._draws_since_retrospect: dict[int, int] = {}
         self._retrospect_requested: set[int] = set()
+        # Bucket B: background clean rebuild (Grok clean text -> Jev per chunk -> draw from scratch).
+        self._bucket_b = bucket_b and judge is not None
+        self._b_judge = judge
+        self._b_min_new_lines = max(1, bucket_b_min_new_lines)
+        self._b_debounce_s = max(0.0, bucket_b_debounce_s)
+        self._b_max_wait_s = max(self._b_debounce_s, bucket_b_max_wait_s)
+        self._b_generation = 0
+        self._b_stopped = False
+        self._b_swaps = 0
+        self._b_requested: set[int] = set()
+        self._b_requested_at = 0.0
+        self._b_last_line_at = 0.0
+        self._b_lines_done: dict[int, int] = {}
+        if bucket_b and judge is None:
+            log.warning("BucketB disabled: Jev unavailable (no TYPESAFE_API_KEY); live view only")
 
     def start(self) -> None:
         self._running = True
         self._threads = [threading.Thread(target=self._route_loop, name="sketch-route", daemon=True),
                          threading.Thread(target=self._draw_loop, name="sketch-draw", daemon=True)]
+        if self._bucket_b:
+            self._threads.append(threading.Thread(target=self._bucket_b_loop, name="sketch-bucket-b", daemon=True))
         for thread in self._threads:
             thread.start()
 
@@ -105,6 +133,8 @@ class SketchPipeline:
         """Stop both threads. A draw still in flight is abandoned."""
         with self._changed:
             self._running = False
+            self._b_stopped = True
+            self._b_generation += 1
             self._changed.notify_all()
         self._segments.put(None)
         for thread in self._threads:
@@ -199,6 +229,7 @@ class SketchPipeline:
             self._draws_since_retrospect[number] = 0
             before_nodes = len(diagram.structure.nodes)
             before_edges = len(diagram.structure.edges)
+            swaps = self._b_swaps
         log.info("Retrospect start diagram %d (%d nodes, %d edges, kind=%s)",
                  diagram.number, before_nodes, before_edges, diagram.kind.value)
         try:
@@ -212,6 +243,9 @@ class SketchPipeline:
             diagram.set_kind(revision.kind)
         styles = self._styles(diagram, diagram.update(structure))
         with self._changed:
+            if swaps != self._b_swaps:
+                log.info("Retrospect dropped diagram %d: BucketB swapped meanwhile", diagram.number)
+                return
             live = self._diagram(diagram.number)
             if revision.kind is not None:
                 live.set_kind(revision.kind)
@@ -224,6 +258,102 @@ class SketchPipeline:
         log.info("Retrospect ok diagram %d (%d->%d nodes, %d->%d edges, kind=%s)",
                  diagram.number, before_nodes, after_nodes, before_edges, after_edges, kind)
         self._publish(state)
+
+    # Bucket B
+
+    def cancel_bucket_b(self) -> None:
+        """Make any in-flight Bucket B rebuild stale; it will not be swapped in."""
+        with self._changed:
+            self._b_generation += 1
+
+    def run_bucket_b(self, number: int | None = None) -> bool:
+        """One Bucket B rebuild of `number` (default: the next requested diagram). True when the view was swapped."""
+        with self._changed:
+            if number is None:
+                number = self._next_bucket_b()
+            if number is None:
+                return False
+            self._b_requested.discard(number)
+            diagram = self._diagrams.get(number)
+            judge = self._b_judge
+            if diagram is None or judge is None:
+                return False
+            source = diagram.copy()
+            self._b_generation += 1
+            generation = self._b_generation
+        try:
+            result = rebuild_from_clean(source, self._drawer, judge, generation, is_current=self._b_current)
+        except Exception:
+            log.exception("BucketB fail diagram %d", number)
+            result = None
+        if result is None:
+            with self._changed:
+                # Do not rebuild the same transcript again after a failure; new lines re-arm it.
+                self._b_lines_done[number] = max(self._b_lines_done.get(number, 0), len(source.transcript))
+            return False
+        return self._swap_bucket_b(result, len(source.transcript))
+
+    def _swap_bucket_b(self, result: BucketBResult, lines_used: int) -> bool:
+        """Soft-swap: replace the live diagram's structure, kind and styles; keep its transcript and selection."""
+        with self._changed:
+            if result.generation != self._b_generation or self._b_stopped:
+                log.info("BucketB drop diagram %d gen=%d: outdated", result.diagram_number, result.generation)
+                return False
+            live = self._diagrams.get(result.diagram_number)
+            if live is None:
+                return False
+            before_nodes, before_edges = len(live.structure.nodes), len(live.structure.edges)
+            live.set_kind(result.kind)
+            live.update(result.structure)
+            live.set_styles(result.node_styles, result.edge_styles)
+            self._b_swaps += 1
+            self._b_lines_done[live.number] = max(self._b_lines_done.get(live.number, 0), lines_used)
+            if len(live.transcript) - lines_used >= self._b_min_new_lines:
+                self._request_bucket_b(live.number)
+            state = self._state(live.number)
+        log.info("BucketB swap diagram %d gen=%d (%d->%d nodes, %d->%d edges, kind=%s)",
+                 result.diagram_number, result.generation, before_nodes, len(result.structure.nodes),
+                 before_edges, len(result.structure.edges), result.kind.value)
+        self._publish(state)
+        return True
+
+    def _b_current(self, generation: int) -> bool:
+        with self._changed:
+            return generation == self._b_generation and not self._b_stopped
+
+    def _note_bucket_b(self, diagram: Diagram) -> None:
+        """Called under the lock after a live draw: arm Bucket B once enough new transcript arrived."""
+        if not self._bucket_b:
+            return
+        self._b_last_line_at = time.monotonic()
+        if len(diagram.transcript) - self._b_lines_done.get(diagram.number, 0) >= self._b_min_new_lines:
+            self._request_bucket_b(diagram.number)
+
+    def _request_bucket_b(self, number: int) -> None:
+        if not self._b_requested:
+            self._b_requested_at = time.monotonic()
+        self._b_requested.add(number)
+        self._changed.notify_all()
+
+    def _next_bucket_b(self) -> int | None:
+        return next((number for number in sorted(self._b_requested) if self._diagrams.get(number) is not None), None)
+
+    def _bucket_b_due_in(self) -> float:
+        """Seconds until a requested rebuild should start: after a quiet spell, or at the latest after max wait."""
+        now = time.monotonic()
+        quiet = self._b_last_line_at + self._b_debounce_s - now
+        overdue = self._b_requested_at + self._b_max_wait_s - now
+        return max(0.0, min(quiet, overdue))
+
+    def _bucket_b_loop(self) -> None:
+        while True:
+            with self._changed:
+                self._changed.wait_for(lambda: bool(self._b_requested) or not self._running)
+                while self._running and (due := self._bucket_b_due_in()) > 0:
+                    self._changed.wait(due)
+                if not self._running:
+                    return
+            self._run_safely(self.run_bucket_b)
 
     def _enqueue(self, line: SpokenLine, destination: Destination, previous: tuple[str, ...]) -> bool:
         """Queue the line for drawing, opening or activating its diagram. True when the current diagram changed."""
@@ -269,14 +399,25 @@ class SketchPipeline:
 
     def _draw_batch(self, batch: list[_Pending]) -> None:
         lines = [pending.line for pending in batch]
+        with self._changed:
+            swaps = self._b_swaps
         try:
             drawn = self._drawn(batch[0], lines)
         except Exception as exc:
             log.warning("Live sketch update skipped: %s", exc)
             self._retry(batch, batch[0].destination.number, str(exc) or type(exc).__name__)
             return
-        if drawn is not None:
-            self._commit(*drawn, lines)
+        if drawn is None:
+            return
+        with self._changed:
+            stale = swaps != self._b_swaps
+            if stale:
+                self._pending[:0] = batch
+                self._changed.notify_all()
+        if stale:
+            log.info("Live draw redone on top of the BucketB swap")
+            return
+        self._commit(*drawn, lines)
 
     def _drawn(self, first: _Pending, lines: list[SpokenLine]) -> tuple[Diagram, Structure] | None:
         number = first.destination.number
@@ -309,6 +450,7 @@ class SketchPipeline:
             live.update(structure)
             live.set_styles(*styles)
             self._note_draw(live, texts)
+            self._note_bucket_b(live)
             state = self._state(live.number)
         self._publish(state)
 

@@ -44,6 +44,19 @@ FORMAT_RULES = (
 )
 ANSWER_RULE = "Return ONLY the complete updated diagram, no fences, no prose."
 
+
+CLEAN_RULES = (
+    "Rewrite the speaker's transcript as clean chronological prose that a teammate can follow.\n"
+    "- Keep the speaker's intent and every real component, role, team, step, skill, loop and decision they named.\n"
+    "- Strip speech-to-text garbage, filler, repeated false starts and half-heard words.\n"
+    "- Put events in the order they happen in the described workflow; later corrections replace earlier mistakes.\n"
+    "- Merge aliases of the same thing into one name and use that name every time.\n"
+    "- Say explicitly which steps happen inside a team or box, which step loops back to which when not satisfied, "
+    "which steps are optional, and how the workflow ends - but only when the speaker said so.\n"
+    "- One short sentence per step or fact.\n"
+    "- Do not invent steps, roles or systems they never mentioned. No diagram, no headings, prose only."
+)
+
 RETROSPECT_RULES = (
     "Revise the whole diagram against everything the speaker said. Later statements win over earlier ones: "
     "when the speaker corrects themselves, drop the contradicted nodes, edges and labels.\n"
@@ -182,6 +195,15 @@ class Drawer:
             "Summary so far:", diagram.summary or "(none)", "", "New transcript lines:", *lines,
         ])
         return self._complete(prompt).strip()
+
+    def clean_transcript(self, lines: list[str], summary: str = "") -> str:
+        """Clean chronological prose from the spoken transcript: Bucket B's source text."""
+        parts = ["You prepare a clean transcript so a diagram can be redrawn from scratch.",
+                 CLEAN_RULES, self._language_rule, ""]
+        if summary:
+            parts += ["Earlier, in short:", summary, ""]
+        parts += ["Raw transcript:", *(lines or ["(nothing yet)"]), "", "Write the cleaned prose now."]
+        return self._complete("\n".join(parts)).strip()
 
     def retrospect(self, diagram: Diagram) -> Revision:
         """A cleaned-up full diagram that reconciles corrections across the whole transcript."""

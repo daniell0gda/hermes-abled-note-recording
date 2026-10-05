@@ -49,6 +49,10 @@ class LiveSketch:
             retrospect_every_n=sketch.retrospect_every_n,
             retrospect_on_correction=sketch.retrospect_on_correction,
             retrospect_max_nodes=sketch.retrospect_max_nodes,
+            bucket_b=sketch.bucket_b,
+            bucket_b_min_new_lines=sketch.bucket_b_min_new_lines,
+            bucket_b_debounce_s=sketch.bucket_b_debounce_s,
+            bucket_b_max_wait_s=sketch.bucket_b_max_wait_s,
         )
         self._pointer = PointerTracker(sketch.point_radius_px, sketch.point_window_s)
         self._pointer_lock = threading.Lock()

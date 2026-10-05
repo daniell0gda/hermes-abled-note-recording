@@ -58,3 +58,8 @@ sketch:                       # live sketch: draws what you explain (microphone 
   retrospect_every_n: 1       # full diagram rewrite after this many draws (1 = after each draw); 0 disables
   retrospect_on_correction: false # ignored; keywords are not used — retrospect runs after draws
   retrospect_max_nodes: 9     # rewrite when the diagram grows past this many nodes
+  bucket_b: true              # background clean rebuild: Grok cleans the transcript, Jev judges it chunk by chunk,
+                              # the diagram is redrawn from scratch and swapped in automatically (needs Jev)
+  bucket_b_min_new_lines: 2   # new transcript lines since the last rebuild before another one is due
+  bucket_b_debounce_s: 2.0    # start a due rebuild after this quiet spell without live draws
+  bucket_b_max_wait_s: 10.0   # ... or at the latest this long after it became due

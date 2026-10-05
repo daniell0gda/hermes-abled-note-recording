@@ -126,6 +126,10 @@ class SketchConfig(_Section):
     retrospect_every_n: int = Field(default=1, ge=0)
     retrospect_on_correction: bool = False  # ignored; retrospect runs after draws, not on keywords
     retrospect_max_nodes: int = Field(default=9, ge=1)
+    bucket_b: bool = True  # background clean rebuild via Jev, soft-swapped into the live view
+    bucket_b_min_new_lines: int = Field(default=2, ge=1)
+    bucket_b_debounce_s: float = Field(default=2.0, ge=0)
+    bucket_b_max_wait_s: float = Field(default=10.0, ge=0)
 
     @field_validator("hotkey")
     @classmethod
