@@ -89,9 +89,19 @@ class _Builder:
             for end in (source, target):
                 self.labels.setdefault(end, _label_from_id(end))
         nodes = tuple(Node(node_id, label) for node_id, label in self.labels.items())
-        groups = tuple(Group(group_id, label, tuple(member for member in members if member in self.labels))
-                       for group_id, label, members in self.groups)
-        return Structure(self.title, nodes, _numbered_edges(self.edges), tuple(group for group in groups if group.members))
+        used = set(self.labels)
+        fixed_groups: list[Group] = []
+        for group_id, label, members in self.groups:
+            gid = group_id
+            if gid in used:
+                gid = f"{group_id}_group"
+                while gid in used:
+                    gid = f"{gid}_g"
+            used.add(gid)
+            kept = tuple(member for member in members if member in self.labels)
+            if kept:
+                fixed_groups.append(Group(gid, label, kept))
+        return Structure(self.title, nodes, _numbered_edges(self.edges), tuple(fixed_groups))
 
 
 def _label_from_id(node_id: str) -> str:
@@ -123,3 +133,4 @@ def parse_structure(text: str) -> Structure:
     if not content_lines:
         raise StructureError("the answer is empty")
     return builder.build()
+

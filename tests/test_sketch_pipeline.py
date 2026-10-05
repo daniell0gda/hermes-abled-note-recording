@@ -14,7 +14,7 @@ from listening_app.sketch.diagrams import (
     Overview,
     Shape,
 )
-from listening_app.sketch.drawer import RoutedDrawing, SpokenLine
+from listening_app.sketch.drawer import Revision, RoutedDrawing, SpokenLine
 from listening_app.sketch.jev_client import JevError, Routing
 from listening_app.sketch.pipeline import MAX_ATTEMPTS, SketchPipeline, SketchState
 
@@ -78,12 +78,14 @@ class FakeDrawer:
         self.summaries.append(lines)
         return "Summary of " + str(len(lines))
 
-    def retrospect(self, diagram: Diagram) -> str:
+    def retrospect(self, diagram: Diagram) -> Revision:
         self.retrospect_calls.append(diagram.number)
         answer = self.retrospect_answers.pop(0) if len(self.retrospect_answers) > 1 else (
             self.retrospect_answers[0] if self.retrospect_answers else diagram.structure.to_text()
         )
-        return answer
+        if isinstance(answer, Revision):
+            return answer
+        return Revision(answer)
 
 
 class Recorder:
@@ -393,14 +395,12 @@ cache "Cache"
 auth -> cache "caches tokens"'''
 
 
-def test_a_correction_triggers_retrospect_that_replaces_a_node() -> None:
+def test_retrospect_runs_after_every_successful_draw() -> None:
+    """With every_n=1, each draw schedules a retrospect — no keyword required."""
     drawer = FakeDrawer(FLOW, FLOW)
     drawer.retrospect_answers = [CORRECTED]
-    sketch, recorder = pipeline(FakeJudge(FIRST, STRUCTURAL), drawer, retrospect_every_n=0)
+    sketch, recorder = pipeline(FakeJudge(FIRST, STRUCTURAL), drawer, retrospect_every_n=1)
     sketch.route(segment("Auth caches tokens in Redis."))
-    sketch.draw_next()
-
-    sketch.route(segment("Actually it is a cache, not Redis."))
     sketch.draw_next()
     sketch.retrospect_if_due()
 
@@ -409,11 +409,23 @@ def test_a_correction_triggers_retrospect_that_replaces_a_node() -> None:
     assert "redis" not in [node["id"] for node in latest_view(recorder)["nodes"]]
 
 
-def test_periodic_retrospect_runs_after_every_n_draws_when_idle() -> None:
+def test_retrospect_does_not_need_correction_keywords() -> None:
+    """Ordinary speech like 'not satisfied' still gets a retrospect after a draw."""
     drawer = FakeDrawer(FLOW)
     drawer.retrospect_answers = [FLOW]
-    sketch, recorder = pipeline(FakeJudge(FIRST, STRUCTURAL), drawer, retrospect_every_n=2,
-                                retrospect_on_correction=False)
+    sketch, recorder = pipeline(FakeJudge(FIRST), drawer, retrospect_every_n=1)
+    sketch.route(segment("The checker is not satisfied and loops back."))
+    sketch.draw_next()
+    sketch.retrospect_if_due()
+
+    assert drawer.retrospect_calls == [1]
+    assert latest_view(recorder)["title"] == "Request path"
+
+
+def test_periodic_retrospect_can_wait_for_every_n_draws() -> None:
+    drawer = FakeDrawer(FLOW)
+    drawer.retrospect_answers = [FLOW]
+    sketch, recorder = pipeline(FakeJudge(FIRST, STRUCTURAL), drawer, retrospect_every_n=2)
     sketch.route(segment("First."))
     sketch.draw_next()
     sketch.retrospect_if_due()
@@ -438,3 +450,21 @@ def test_too_many_nodes_schedules_a_retrospect() -> None:
 
     assert drawer.retrospect_calls == [1]
     assert len(latest_view(recorder)["nodes"]) == 2
+
+
+def test_retrospect_can_change_diagram_kind() -> None:
+    drawer = FakeDrawer(FLOW)
+    drawer.retrospect_answers = [
+        Revision(
+            'title "Issue flow"\nuser "User"\nplanner "Planner"\nuser -> planner "starts"',
+            DiagramKind.SWIMLANE,
+        )
+    ]
+    sketch, recorder = pipeline(FakeJudge(FIRST), drawer, retrospect_every_n=1)
+    sketch.route(segment("The user starts an issue with the planner."))
+    sketch.draw_next()
+    sketch.retrospect_if_due()
+
+    assert drawer.retrospect_calls == [1]
+    assert latest_view(recorder)["kind"] == "swimlane"
+    assert [node["id"] for node in latest_view(recorder)["nodes"]] == ["user", "planner"]

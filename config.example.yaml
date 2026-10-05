@@ -55,6 +55,6 @@ sketch:                       # live sketch: draws what you explain (microphone 
   label_language: auto        # auto (= spoken language) | pl | en
   point_radius_px: 24         # mouse held within this radius ...
   point_window_s: 2           # ... for this long points at the element under it
-  retrospect_every_n: 5       # full diagram rewrite after this many draws; 0 disables the cadence
-  retrospect_on_correction: true  # also rewrite when the speaker corrects themselves (actually, właściwie, ...)
+  retrospect_every_n: 1       # full diagram rewrite after this many draws (1 = after each draw); 0 disables
+  retrospect_on_correction: false # ignored; keywords are not used — retrospect runs after draws
   retrospect_max_nodes: 9     # rewrite when the diagram grows past this many nodes

@@ -31,6 +31,10 @@ KINDS = {
     DiagramKind.STATE: "The lifecycle or statuses of one thing and the transitions between them",
     DiagramKind.TREE: "Hierarchy, parent and child decomposition",
     DiagramKind.ER: "Entities and their relationships",
+    DiagramKind.SWIMLANE: "Handoffs between roles or teams drawn as lanes (groups), top-to-bottom",
+    DiagramKind.NESTED: "Scope and containment: outer groups hold inner members",
+    DiagramKind.LAYERS: "Stacked concerns from top to bottom (user, process, team, QA, done)",
+    DiagramKind.DEPENDENCY: "Unordered dependencies or ownership between components",
 }
 SHAPES = {
     Shape.SERVICE: "An application service, server, API or backend component that runs code",
@@ -188,3 +192,4 @@ def _style_questions(diagram: Diagram, changes: Changes) -> dict[str, Any]:
             "instructions": f"What kind of connection is `edges[{index}]` from `{edge.source}` to `{edge.target}`"
                             + (f' ("{edge.label}")' if edge.label else "") + "?"}
     return questions
+

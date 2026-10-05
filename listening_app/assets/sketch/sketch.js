@@ -21,7 +21,7 @@
   const MAX_SCALE = 1.6;
   const EYEBROWS = { database: "DATABASE", queue: "QUEUE", cache: "CACHE", external: "EXTERNAL", client: "CLIENT", actor: "ACTOR" };
   const BASE_HEIGHT = { database: 56, decision: 56, actor: 48 };
-  const RANK_DIRECTION = { tree: "TB" };
+  const RANK_DIRECTION = { tree: "TB", nested: "TB", layers: "TB", swimlane: "TB", state: "TB" };
 
   function snap(value) {
     return Math.ceil(value / GRID) * GRID;

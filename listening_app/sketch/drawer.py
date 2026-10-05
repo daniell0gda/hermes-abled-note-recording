@@ -15,11 +15,15 @@ MAX_NODES = 12
 RETROSPECT_MAX_NODES = 9
 
 KIND_HINTS = {
-    DiagramKind.FLOW: "Nodes are components or steps; edges are calls or data flow.",
+    DiagramKind.FLOW: "Nodes are components or steps; edges are calls or data flow. Prefer left-to-right unless the story is clearly top-down.",
     DiagramKind.SEQUENCE: "Nodes are participants; every edge is one message, listed in the order the messages happen.",
-    DiagramKind.STATE: "Nodes are states; edges are transitions labelled with their trigger.",
-    DiagramKind.TREE: "Edges go from parent to child.",
+    DiagramKind.STATE: "Nodes are states; edges are transitions labelled with their trigger. Prefer top-to-bottom.",
+    DiagramKind.TREE: "Edges go from parent to child. Prefer top-to-bottom.",
     DiagramKind.ER: "Nodes are entities; edges are relationships labelled with their meaning and cardinality.",
+    DiagramKind.SWIMLANE: "Roles or teams are groups (lanes); steps move between them. Prefer top-to-bottom. Use group lines for each lane.",
+    DiagramKind.NESTED: "Show scope and containment: outer groups hold inner members. Prefer top-to-bottom. No separate node with the same id as a group.",
+    DiagramKind.LAYERS: "Stacked concerns (user → process → team → QA → done). Prefer top-to-bottom; groups mark layers.",
+    DiagramKind.DEPENDENCY: "Unordered dependencies or ownership between components; edges mean depends-on, not sequence. Prefer left-to-right.",
 }
 LANGUAGE_RULES = {
     Language.AUTO: "Write labels in the language the speaker uses.",
@@ -42,15 +46,37 @@ ANSWER_RULE = "Return ONLY the complete updated diagram, no fences, no prose."
 
 RETROSPECT_RULES = (
     "Revise the whole diagram against everything the speaker said. Later statements win over earlier ones: "
-    "when the speaker corrects themselves, drop the contradicted nodes, edges and labels. "
-    "Merge duplicate nodes that mean the same thing; delete orphans with no edges unless the speaker named them; "
-    "fix dangling edges. Keep existing ids whenever the same element remains. "
-    f"At most {RETROSPECT_MAX_NODES} nodes — drop the least important ones if needed. "
+    "when the speaker corrects themselves, drop the contradicted nodes, edges and labels.\n"
+    "Editorial cleanup (do all of these):\n"
+    "- Merge aliases and synonyms into one node (e.g. manual tester = manual tracker = QA).\n"
+    "- Drop STT garbage: nodes whose labels were never clearly named as a real component, role or step.\n"
+    "- One role or component = one node; do not split a single name across several nodes.\n"
+    "- Never give a group the same id as a node — rename the group (e.g. team_group) or drop the duplicate node.\n"
+    "- Prefer clear layers when the story has stages: entry → process → roles/team → QA → done.\n"
+    "- Delete orphans with no edges unless the speaker named them; fix dangling edges.\n"
+    "- Keep existing ids whenever the same element remains.\n"
+    f"At most {RETROSPECT_MAX_NODES} nodes — drop the least important ones if needed.\n"
     "Do not invent elements the speaker never mentioned."
+)
+
+KIND_CHOICE_RULES = (
+    "You may change the diagram type when a different type fits the whole explanation better. "
+    "Start your answer with exactly one line `kind <type>` (then the diagram), choosing the best type:\n"
+    "- flow: ordered steps / pipeline / happy path\n"
+    "- sequence: messages between participants over time\n"
+    "- state: lifecycle statuses and transitions\n"
+    "- tree: hierarchy parent→child\n"
+    "- er: entities and relationships\n"
+    "- swimlane: handoffs between roles or teams (lanes as groups), prefer top-to-bottom\n"
+    "- nested: scope / containment (groups hold members), prefer top-to-bottom\n"
+    "- layers: stacked concerns top-to-bottom\n"
+    "- dependency: unordered depends-on links\n"
+    "If the current type is already right, omit the kind line and keep it."
 )
 
 _EXISTING_HEADER = re.compile(r"^diagram\s+(\d+)$")
 _NEW_HEADER = re.compile(rf"^diagram\s+new\s+({'|'.join(kind.value for kind in DiagramKind)})$")
+_KIND_HEADER = re.compile(rf"^kind\s+({'|'.join(kind.value for kind in DiagramKind)})$")
 _NO_STRUCTURE = "none"
 _FENCE = "```"
 
@@ -78,6 +104,14 @@ class RoutedDrawing:
 
     destination: Destination | None
     text: str
+
+
+@dataclass(frozen=True)
+class Revision:
+    """A cleaned-up diagram text; `kind` is set when the model chose a better diagram type."""
+
+    text: str
+    kind: DiagramKind | None = None
 
 
 def litellm_completion(model: str, messages: list[dict[str, str]], credentials: Credentials) -> str:
@@ -149,18 +183,23 @@ class Drawer:
         ])
         return self._complete(prompt).strip()
 
-    def retrospect(self, diagram: Diagram) -> str:
+    def retrospect(self, diagram: Diagram) -> Revision:
         """A cleaned-up full diagram that reconciles corrections across the whole transcript."""
         prompt = "\n".join([
             f"You revise a live {diagram.kind.value} diagram so it matches everything the speaker said, "
             "not only the latest lines.",
-            FORMAT_RULES, RETROSPECT_RULES, KIND_HINTS[diagram.kind], self._language_rule, ANSWER_RULE, "",
+            FORMAT_RULES, RETROSPECT_RULES, KIND_CHOICE_RULES,
+            f"Current type hint: {KIND_HINTS[diagram.kind]}",
+            *(f"{kind.value}: {hint}" for kind, hint in KIND_HINTS.items()),
+            self._language_rule,
+            "Return ONLY an optional `kind <type>` line, then the complete updated diagram — no fences, no prose.",
+            "",
             "Current diagram:", diagram.structure.to_text() or "(empty)", "",
             *_transcript_section(diagram),
             *_selection_section(diagram),
             "Produce the complete revised diagram now.",
         ])
-        return self._complete(prompt)
+        return parse_revision(self._complete(prompt))
 
     def _complete(self, prompt: str) -> str:
         return self._completion(self._model, [{"role": "user", "content": prompt}], self._credentials())
@@ -196,6 +235,22 @@ def _diagram_listing(diagrams: DiagramSet) -> list[str]:
     return listing
 
 
+def parse_revision(answer: str) -> Revision:
+    """Optional leading `kind <type>` line, then the diagram body."""
+    lines = answer.strip().splitlines()
+    while lines and (not lines[0].strip() or lines[0].strip().startswith(_FENCE)):
+        lines.pop(0)
+    if not lines:
+        raise StructureError("the answer is empty")
+    header = lines[0].strip().lower()
+    if match := _KIND_HEADER.match(header):
+        body = "\n".join(lines[1:]).strip()
+        if not body:
+            raise StructureError("kind line without a diagram")
+        return Revision(body, DiagramKind(match[1]))
+    return Revision("\n".join(lines))
+
+
 def _split_routed(answer: str) -> RoutedDrawing:
     lines = answer.strip().splitlines()
     while lines and (not lines[0].strip() or lines[0].strip().startswith(_FENCE)):
@@ -210,3 +265,4 @@ def _split_routed(answer: str) -> RoutedDrawing:
     if match := _NEW_HEADER.match(header):
         return RoutedDrawing(Destination.new(DiagramKind(match[1])), body)
     raise StructureError(f"line 1 is not a diagram choice: {lines[0].strip()}")
+

@@ -126,3 +126,22 @@ def test_recent_lines_are_the_transcript_not_yet_folded_into_the_summary() -> No
 
     assert diagram.summary == "One happened."
     assert diagram.recent_lines() == ["three"]
+
+
+def test_set_kind_changes_the_diagram_type_in_the_view() -> None:
+    diagram = Diagram(1, DiagramKind.FLOW)
+    diagram.update(FIRST)
+    diagram.set_kind(DiagramKind.SWIMLANE)
+    assert diagram.view()["kind"] == "swimlane"
+
+
+def test_group_id_colliding_with_a_node_is_renamed() -> None:
+    structure = parse_structure(
+        'title "Team"\n'
+        'team "Team leader"\n'
+        'dev "Developer"\n'
+        'group team "Team": team, dev'
+    )
+    assert [node.id for node in structure.nodes] == ["team", "dev"]
+    assert [group.id for group in structure.groups] == ["team_group"]
+    assert structure.groups[0].members == ("team", "dev")

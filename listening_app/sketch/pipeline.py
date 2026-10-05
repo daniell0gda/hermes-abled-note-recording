@@ -13,7 +13,7 @@ from dataclasses import dataclass, replace
 from typing import Any, Protocol
 
 from listening_app.sketch.diagrams import Changes, Destination, Diagram, DiagramSet, EdgeStyle, NodeStyle, Overview
-from listening_app.sketch.drawer import RoutedDrawing, SpokenLine
+from listening_app.sketch.drawer import Revision, RoutedDrawing, SpokenLine
 from listening_app.sketch.jev_client import JevError, Routing
 from listening_app.sketch.structure import Structure, StructureError, parse_structure
 
@@ -24,28 +24,8 @@ PREVIOUS_SEGMENTS = 3
 SUMMARY_AFTER_LINES = 16
 SUMMARY_FOLD_LINES = 8
 STOP_TIMEOUT_S = 2.0
-DEFAULT_RETROSPECT_EVERY_N = 5
+DEFAULT_RETROSPECT_EVERY_N = 1
 DEFAULT_RETROSPECT_MAX_NODES = 9
-
-# Spoken cues that usually mean the speaker is revising something just said (EN + PL).
-_CORRECTION_CUE = re.compile(
-    r"(?i)(?:"
-    r"\b(?:actually|instead|wait|rather|correction)\b|"
-    r"\bi\s+meant\b|"
-    r"\bit'?s\s+(?:actually\s+)?(?:different|not)\b|"
-    r"\bnot\s+(?:a\s+|an\s+|the\s+)?\w+|"
-    r"\bwłaściwie\b|"
-    r"\braczej\b|"
-    r"\bzamiast\b|"
-    r"\bpoprawka\b|"
-    r"\bkorekta\b|"
-    r"\bchodziło\s+mi\b|"
-    r"\bmam\s+na\s+myśli\b|"
-    r"\bto\s+nie\s+tak\b|"
-    r"\bnie\s+(?:jest\s+)?(?:to\s+)?\w+"
-    r")"
-)
-
 
 Styles = tuple[dict[str, NodeStyle], dict[str, EdgeStyle]]
 
@@ -63,7 +43,7 @@ class Artist(Protocol):
 
     def summarize(self, diagram: Diagram, lines: list[str]) -> str: ...
 
-    def retrospect(self, diagram: Diagram) -> str: ...
+    def retrospect(self, diagram: Diagram) -> Revision: ...
 
 
 @dataclass(frozen=True)
@@ -94,13 +74,13 @@ class _Pending:
 class SketchPipeline:
     def __init__(self, drawer: Artist, judge: Judge | None, listener: SketchListener,
                  *, retrospect_every_n: int = DEFAULT_RETROSPECT_EVERY_N,
-                 retrospect_on_correction: bool = True,
-                 retrospect_max_nodes: int = DEFAULT_RETROSPECT_MAX_NODES) -> None:
+                 retrospect_max_nodes: int = DEFAULT_RETROSPECT_MAX_NODES,
+                 retrospect_on_correction: bool = False) -> None:
+        # retrospect_on_correction is ignored (kept for older call sites); keywords are not used.
         self._drawer = drawer
         self._judge = judge
         self._listener = listener
         self._retrospect_every_n = retrospect_every_n
-        self._retrospect_on_correction = retrospect_on_correction
         self._retrospect_max_nodes = retrospect_max_nodes
         self._diagrams = DiagramSet()
         self._changed = threading.Condition()
@@ -209,7 +189,7 @@ class SketchPipeline:
                 live.fold_into_summary(summary, len(lines))
 
     def retrospect_if_due(self) -> None:
-        """Rewrite one diagram that is due for a full revision (correction, schedule or size)."""
+        """Rewrite one diagram that is due for a full revision (after a draw, idle, or size)."""
         with self._changed:
             number = self._next_retrospect()
             if number is None:
@@ -217,17 +197,32 @@ class SketchPipeline:
             diagram = self._diagram(number).copy()
             self._retrospect_requested.discard(number)
             self._draws_since_retrospect[number] = 0
+            before_nodes = len(diagram.structure.nodes)
+            before_edges = len(diagram.structure.edges)
+        log.info("Retrospect start diagram %d (%d nodes, %d edges, kind=%s)",
+                 diagram.number, before_nodes, before_edges, diagram.kind.value)
         try:
-            structure = parse_structure(self._drawer.retrospect(diagram))
+            revision = self._drawer.retrospect(diagram)
+            structure = parse_structure(revision.text)
         except Exception as exc:
-            log.warning("Retrospecting diagram %d failed: %s", diagram.number, exc)
+            log.warning("Retrospect fail diagram %d (%d nodes, %d edges): %s",
+                        diagram.number, before_nodes, before_edges, exc)
             return
+        if revision.kind is not None:
+            diagram.set_kind(revision.kind)
         styles = self._styles(diagram, diagram.update(structure))
         with self._changed:
             live = self._diagram(diagram.number)
+            if revision.kind is not None:
+                live.set_kind(revision.kind)
             live.update(structure)
             live.set_styles(*styles)
             state = self._state(live.number)
+            after_nodes = len(live.structure.nodes)
+            after_edges = len(live.structure.edges)
+            kind = live.kind.value
+        log.info("Retrospect ok diagram %d (%d->%d nodes, %d->%d edges, kind=%s)",
+                 diagram.number, before_nodes, after_nodes, before_edges, after_edges, kind)
         self._publish(state)
 
     def _enqueue(self, line: SpokenLine, destination: Destination, previous: tuple[str, ...]) -> bool:
@@ -318,11 +313,9 @@ class SketchPipeline:
         self._publish(state)
 
     def _note_draw(self, diagram: Diagram, texts: list[str]) -> None:
-        """After a successful draw, schedule a retrospect when cues, cadence or size say so."""
+        """After a successful draw, schedule a retrospect (every N draws; N=1 means after each draw)."""
         number = diagram.number
         self._draws_since_retrospect[number] = self._draws_since_retrospect.get(number, 0) + 1
-        if self._retrospect_on_correction and any(looks_like_correction(text) for text in texts):
-            self._retrospect_requested.add(number)
         every = self._retrospect_every_n
         if every and self._draws_since_retrospect[number] >= every:
             self._retrospect_requested.add(number)
@@ -401,10 +394,11 @@ class SketchPipeline:
                 if not self._running:
                     return
             self._run_safely(self.draw_next)
+            # Retrospect right after a draw so the speaker sees the cleaned graph while the window is open.
+            self._run_safely(self.retrospect_if_due)
             with self._changed:
                 idle = not self._pending
             if idle:
-                self._run_safely(self.retrospect_if_due)
                 self._run_safely(self.summarize_if_due)
 
     @staticmethod
@@ -415,6 +409,3 @@ class SketchPipeline:
             log.exception("Live sketch step failed")
 
 
-def looks_like_correction(text: str) -> bool:
-    """True when `text` sounds like the speaker is revising something they just said."""
-    return bool(_CORRECTION_CUE.search(text))

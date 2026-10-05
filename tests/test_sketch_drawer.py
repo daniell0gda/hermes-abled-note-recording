@@ -3,7 +3,7 @@ import pytest
 from listening_app.config import AppConfig, Language
 from listening_app.sketch import drawer as drawer_module
 from listening_app.sketch.diagrams import Destination, Diagram, DiagramKind, DiagramSet
-from listening_app.sketch.drawer import Credentials, Drawer, RoutedDrawing, SpokenLine, credentials_provider
+from listening_app.sketch.drawer import Credentials, Drawer, Revision, RoutedDrawing, SpokenLine, credentials_provider, parse_revision
 from listening_app.sketch.structure import StructureError, parse_structure
 
 CURRENT = 'title "Request path"\nauth "Auth service"\nredis "Redis"\nauth -> redis "caches tokens"'
@@ -166,10 +166,21 @@ def test_retrospect_prompt_uses_the_full_transcript_and_asks_to_reconcile() -> N
     answer = drawer.retrospect(diagram)
 
     prompt = fake.prompt()
-    assert 'cache "Cache"' in answer or "Cache" in answer
+    assert isinstance(answer, Revision)
+    assert 'cache "Cache"' in answer.text or "Cache" in answer.text
+    assert answer.kind is None
     assert "revise a live flow diagram" in prompt
     assert "Later statements win" in prompt
+    assert "Merge aliases and synonyms" in prompt
+    assert "Never give a group the same id as a node" in prompt
+    assert "kind <type>" in prompt
     assert "The gateway checks the token with auth." in prompt
     assert "Actually Redis is just a cache." in prompt
     assert 'auth -> redis "caches tokens"' in prompt
     assert "New lines:" not in prompt
+
+
+def test_parse_revision_reads_optional_kind_line() -> None:
+    body = 'title "Issue flow"\nuser "User"'
+    assert parse_revision("kind swimlane\n" + body) == Revision(body, DiagramKind.SWIMLANE)
+    assert parse_revision(body) == Revision(body)

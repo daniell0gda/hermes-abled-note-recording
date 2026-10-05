@@ -15,6 +15,10 @@ class DiagramKind(StrEnum):
     STATE = "state"
     TREE = "tree"
     ER = "er"
+    SWIMLANE = "swimlane"
+    NESTED = "nested"
+    LAYERS = "layers"
+    DEPENDENCY = "dependency"
 
 
 class Shape(StrEnum):
@@ -115,6 +119,10 @@ class Diagram:
         self.selection &= structure.element_ids()
         return changes
 
+    def set_kind(self, kind: DiagramKind) -> None:
+        """Switch the diagram type (layout/semantics); content and styles stay."""
+        self.kind = kind
+
     def copy(self) -> "Diagram":
         """An independent copy, for work done outside the pipeline's lock."""
         return replace(self, transcript=list(self.transcript), selection=set(self.selection),
@@ -211,3 +219,4 @@ class DiagramSet:
         self._diagrams.append(diagram)
         self._active = diagram
         return diagram
+

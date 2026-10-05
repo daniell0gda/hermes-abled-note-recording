@@ -123,8 +123,8 @@ class SketchConfig(_Section):
     label_language: Language = Language.AUTO
     point_radius_px: int = Field(default=24, ge=1)
     point_window_s: float = Field(default=2, gt=0)
-    retrospect_every_n: int = Field(default=5, ge=0)
-    retrospect_on_correction: bool = True
+    retrospect_every_n: int = Field(default=1, ge=0)
+    retrospect_on_correction: bool = False  # ignored; retrospect runs after draws, not on keywords
     retrospect_max_nodes: int = Field(default=9, ge=1)
 
     @field_validator("hotkey")
@@ -329,3 +329,4 @@ class ConfigManager:
     def update(self, keys: tuple[str, ...], value: str | bool | None) -> AppConfig:
         write_setting(self.path, keys, value)
         return self.reload()
+
