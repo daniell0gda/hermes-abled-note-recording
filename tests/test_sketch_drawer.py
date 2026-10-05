@@ -156,3 +156,20 @@ def test_an_api_key_is_used_as_is(monkeypatch: pytest.MonkeyPatch) -> None:
     config = AppConfig.model_validate({"sketch": {"draw_model": "openai/gpt-4.1-mini"}})
 
     assert credentials_provider(config)() == Credentials("sk-test")
+
+
+def test_retrospect_prompt_uses_the_full_transcript_and_asks_to_reconcile() -> None:
+    drawer, fake = make_drawer('title "Request path"\nauth "Auth"\ncache "Cache"')
+    diagram = request_path()
+    diagram.transcript.append("Actually Redis is just a cache.")
+
+    answer = drawer.retrospect(diagram)
+
+    prompt = fake.prompt()
+    assert 'cache "Cache"' in answer or "Cache" in answer
+    assert "revise a live flow diagram" in prompt
+    assert "Later statements win" in prompt
+    assert "The gateway checks the token with auth." in prompt
+    assert "Actually Redis is just a cache." in prompt
+    assert 'auth -> redis "caches tokens"' in prompt
+    assert "New lines:" not in prompt

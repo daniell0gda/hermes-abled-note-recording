@@ -6,6 +6,7 @@ language: pl                  # pl | en | auto
 output_dir: "%USERPROFILE%\\Documents\\MeetingTranscripts"
 save_audio: false             # keep every segment WAV in <session_id>/audio/ (failed segments are always kept)
 hotkey: "ctrl+alt+r"          # global Start/Stop hotkey; "" disables it
+pause_hotkey: "ctrl+shift+p"  # pause/resume transcription while recording; "" disables it
 notifications: true           # pop-ups; false = only the tray icon and tooltip show state and errors
 log_level: INFO               # DEBUG also logs transcript text
 
@@ -54,3 +55,6 @@ sketch:                       # live sketch: draws what you explain (microphone 
   label_language: auto        # auto (= spoken language) | pl | en
   point_radius_px: 24         # mouse held within this radius ...
   point_window_s: 2           # ... for this long points at the element under it
+  retrospect_every_n: 5       # full diagram rewrite after this many draws; 0 disables the cadence
+  retrospect_on_correction: true  # also rewrite when the speaker corrects themselves (actually, właściwie, ...)
+  retrospect_max_nodes: 9     # rewrite when the diagram grows past this many nodes

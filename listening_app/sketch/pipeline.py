@@ -5,6 +5,7 @@ they are then drawn together in the next request. Nothing here blocks the caller
 """
 
 import logging
+import re
 import queue
 import threading
 from collections.abc import Callable
@@ -23,6 +24,28 @@ PREVIOUS_SEGMENTS = 3
 SUMMARY_AFTER_LINES = 16
 SUMMARY_FOLD_LINES = 8
 STOP_TIMEOUT_S = 2.0
+DEFAULT_RETROSPECT_EVERY_N = 5
+DEFAULT_RETROSPECT_MAX_NODES = 9
+
+# Spoken cues that usually mean the speaker is revising something just said (EN + PL).
+_CORRECTION_CUE = re.compile(
+    r"(?i)(?:"
+    r"\b(?:actually|instead|wait|rather|correction)\b|"
+    r"\bi\s+meant\b|"
+    r"\bit'?s\s+(?:actually\s+)?(?:different|not)\b|"
+    r"\bnot\s+(?:a\s+|an\s+|the\s+)?\w+|"
+    r"\bwłaściwie\b|"
+    r"\braczej\b|"
+    r"\bzamiast\b|"
+    r"\bpoprawka\b|"
+    r"\bkorekta\b|"
+    r"\bchodziło\s+mi\b|"
+    r"\bmam\s+na\s+myśli\b|"
+    r"\bto\s+nie\s+tak\b|"
+    r"\bnie\s+(?:jest\s+)?(?:to\s+)?\w+"
+    r")"
+)
+
 
 Styles = tuple[dict[str, NodeStyle], dict[str, EdgeStyle]]
 
@@ -39,6 +62,8 @@ class Artist(Protocol):
     def draw_routed(self, diagrams: DiagramSet, previous: list[str], lines: list[SpokenLine]) -> RoutedDrawing: ...
 
     def summarize(self, diagram: Diagram, lines: list[str]) -> str: ...
+
+    def retrospect(self, diagram: Diagram) -> str: ...
 
 
 @dataclass(frozen=True)
@@ -67,10 +92,16 @@ class _Pending:
 
 
 class SketchPipeline:
-    def __init__(self, drawer: Artist, judge: Judge | None, listener: SketchListener) -> None:
+    def __init__(self, drawer: Artist, judge: Judge | None, listener: SketchListener,
+                 *, retrospect_every_n: int = DEFAULT_RETROSPECT_EVERY_N,
+                 retrospect_on_correction: bool = True,
+                 retrospect_max_nodes: int = DEFAULT_RETROSPECT_MAX_NODES) -> None:
         self._drawer = drawer
         self._judge = judge
         self._listener = listener
+        self._retrospect_every_n = retrospect_every_n
+        self._retrospect_on_correction = retrospect_on_correction
+        self._retrospect_max_nodes = retrospect_max_nodes
         self._diagrams = DiagramSet()
         self._changed = threading.Condition()
         self._pending: list[_Pending] = []
@@ -80,6 +111,8 @@ class SketchPipeline:
         self._drawing = False
         self._running = False
         self._threads: list[threading.Thread] = []
+        self._draws_since_retrospect: dict[int, int] = {}
+        self._retrospect_requested: set[int] = set()
 
     def start(self) -> None:
         self._running = True
@@ -175,6 +208,28 @@ class SketchPipeline:
             if live is not None:
                 live.fold_into_summary(summary, len(lines))
 
+    def retrospect_if_due(self) -> None:
+        """Rewrite one diagram that is due for a full revision (correction, schedule or size)."""
+        with self._changed:
+            number = self._next_retrospect()
+            if number is None:
+                return
+            diagram = self._diagram(number).copy()
+            self._retrospect_requested.discard(number)
+            self._draws_since_retrospect[number] = 0
+        try:
+            structure = parse_structure(self._drawer.retrospect(diagram))
+        except Exception as exc:
+            log.warning("Retrospecting diagram %d failed: %s", diagram.number, exc)
+            return
+        styles = self._styles(diagram, diagram.update(structure))
+        with self._changed:
+            live = self._diagram(diagram.number)
+            live.update(structure)
+            live.set_styles(*styles)
+            state = self._state(live.number)
+        self._publish(state)
+
     def _enqueue(self, line: SpokenLine, destination: Destination, previous: tuple[str, ...]) -> bool:
         """Queue the line for drawing, opening or activating its diagram. True when the current diagram changed."""
         before = self._diagrams.active
@@ -258,8 +313,31 @@ class SketchPipeline:
             live.transcript += texts
             live.update(structure)
             live.set_styles(*styles)
+            self._note_draw(live, texts)
             state = self._state(live.number)
         self._publish(state)
+
+    def _note_draw(self, diagram: Diagram, texts: list[str]) -> None:
+        """After a successful draw, schedule a retrospect when cues, cadence or size say so."""
+        number = diagram.number
+        self._draws_since_retrospect[number] = self._draws_since_retrospect.get(number, 0) + 1
+        if self._retrospect_on_correction and any(looks_like_correction(text) for text in texts):
+            self._retrospect_requested.add(number)
+        every = self._retrospect_every_n
+        if every and self._draws_since_retrospect[number] >= every:
+            self._retrospect_requested.add(number)
+        if len(diagram.structure.nodes) > self._retrospect_max_nodes:
+            self._retrospect_requested.add(number)
+
+    def _next_retrospect(self) -> int | None:
+        """Pick one diagram that should be revised, preferring an explicit request."""
+        for number in sorted(self._retrospect_requested):
+            if self._diagrams.get(number) is not None:
+                return number
+        for diagram in self._diagrams.diagrams:
+            if len(diagram.structure.nodes) > self._retrospect_max_nodes:
+                return diagram.number
+        return None
 
     def _styles(self, diagram: Diagram, changes: Changes) -> Styles:
         with self._changed:
@@ -326,6 +404,7 @@ class SketchPipeline:
             with self._changed:
                 idle = not self._pending
             if idle:
+                self._run_safely(self.retrospect_if_due)
                 self._run_safely(self.summarize_if_due)
 
     @staticmethod
@@ -334,3 +413,8 @@ class SketchPipeline:
             step()
         except Exception:
             log.exception("Live sketch step failed")
+
+
+def looks_like_correction(text: str) -> bool:
+    """True when `text` sounds like the speaker is revising something they just said."""
+    return bool(_CORRECTION_CUE.search(text))

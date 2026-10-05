@@ -123,6 +123,9 @@ class SketchConfig(_Section):
     label_language: Language = Language.AUTO
     point_radius_px: int = Field(default=24, ge=1)
     point_window_s: float = Field(default=2, gt=0)
+    retrospect_every_n: int = Field(default=5, ge=0)
+    retrospect_on_correction: bool = True
+    retrospect_max_nodes: int = Field(default=9, ge=1)
 
     @field_validator("hotkey")
     @classmethod
@@ -141,6 +144,7 @@ class AppConfig(_Section):
     output_dir: str = "%USERPROFILE%\\Documents\\MeetingTranscripts"
     save_audio: bool = False
     hotkey: str = "ctrl+alt+r"
+    pause_hotkey: str = "ctrl+shift+p"
     notifications: bool = True
     log_level: LogLevel = LogLevel.INFO
     devices: DevicesConfig = DevicesConfig()
@@ -150,15 +154,24 @@ class AppConfig(_Section):
     hermes: HermesConfig = HermesConfig()
     sketch: SketchConfig = SketchConfig()
 
-    @field_validator("hotkey")
+    @field_validator("hotkey", "pause_hotkey")
     @classmethod
     def _valid_hotkey(cls, value: str) -> str:
         return _checked_hotkey(value)
 
     @model_validator(mode="after")
     def _distinct_hotkeys(self) -> "AppConfig":
-        if self.hotkey and self.sketch.hotkey and parse_hotkey(self.hotkey) == parse_hotkey(self.sketch.hotkey):
-            raise ValueError("sketch.hotkey must differ from hotkey")
+        named = {
+            "hotkey": self.hotkey,
+            "pause_hotkey": self.pause_hotkey,
+            "sketch.hotkey": self.sketch.hotkey,
+        }
+        parsed = {name: parse_hotkey(text) for name, text in named.items() if text}
+        names = list(parsed)
+        for index, left in enumerate(names):
+            for right in names[index + 1:]:
+                if parsed[left] == parsed[right]:
+                    raise ValueError(f"{right} must differ from {left}")
         return self
 
     @field_validator("providers")

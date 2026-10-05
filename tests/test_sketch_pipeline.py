@@ -55,6 +55,8 @@ class FakeDrawer:
         self.routed_calls: list[list[SpokenLine]] = []
         self.routed_answer = RoutedDrawing(Destination.new(DiagramKind.FLOW), FLOW)
         self.summaries: list[list[str]] = []
+        self.retrospect_calls: list[int] = []
+        self.retrospect_answers: list[str] = []
         self.gate: threading.Event | None = None
         self.entered = threading.Event()
 
@@ -75,6 +77,13 @@ class FakeDrawer:
     def summarize(self, diagram: Diagram, lines: list[str]) -> str:
         self.summaries.append(lines)
         return "Summary of " + str(len(lines))
+
+    def retrospect(self, diagram: Diagram) -> str:
+        self.retrospect_calls.append(diagram.number)
+        answer = self.retrospect_answers.pop(0) if len(self.retrospect_answers) > 1 else (
+            self.retrospect_answers[0] if self.retrospect_answers else diagram.structure.to_text()
+        )
+        return answer
 
 
 class Recorder:
@@ -99,9 +108,9 @@ def segment(text: str, pointed: str | None = None) -> SpokenLine:
     return SpokenLine(text, pointed)
 
 
-def pipeline(judge: FakeJudge | None, drawer: FakeDrawer) -> tuple[SketchPipeline, Recorder]:
+def pipeline(judge: FakeJudge | None, drawer: FakeDrawer, **sketch_options: object) -> tuple[SketchPipeline, Recorder]:
     recorder = Recorder()
-    return SketchPipeline(drawer, judge, recorder), recorder
+    return SketchPipeline(drawer, judge, recorder, **sketch_options), recorder  # type: ignore[arg-type]
 
 
 def latest_view(recorder: Recorder, number: int = 1) -> dict[str, Any]:
@@ -376,3 +385,56 @@ def test_listener_errors_do_not_stop_the_pipeline(failing: str) -> None:
 
     while sketch.draw_next():
         pass
+
+
+CORRECTED = '''title "Request path"
+auth "Auth service"
+cache "Cache"
+auth -> cache "caches tokens"'''
+
+
+def test_a_correction_triggers_retrospect_that_replaces_a_node() -> None:
+    drawer = FakeDrawer(FLOW, FLOW)
+    drawer.retrospect_answers = [CORRECTED]
+    sketch, recorder = pipeline(FakeJudge(FIRST, STRUCTURAL), drawer, retrospect_every_n=0)
+    sketch.route(segment("Auth caches tokens in Redis."))
+    sketch.draw_next()
+
+    sketch.route(segment("Actually it is a cache, not Redis."))
+    sketch.draw_next()
+    sketch.retrospect_if_due()
+
+    assert drawer.retrospect_calls == [1]
+    assert [node["id"] for node in latest_view(recorder)["nodes"]] == ["auth", "cache"]
+    assert "redis" not in [node["id"] for node in latest_view(recorder)["nodes"]]
+
+
+def test_periodic_retrospect_runs_after_every_n_draws_when_idle() -> None:
+    drawer = FakeDrawer(FLOW)
+    drawer.retrospect_answers = [FLOW]
+    sketch, recorder = pipeline(FakeJudge(FIRST, STRUCTURAL), drawer, retrospect_every_n=2,
+                                retrospect_on_correction=False)
+    sketch.route(segment("First."))
+    sketch.draw_next()
+    sketch.retrospect_if_due()
+    assert drawer.retrospect_calls == []
+
+    sketch.route(segment("Second."))
+    sketch.draw_next()
+    sketch.retrospect_if_due()
+
+    assert drawer.retrospect_calls == [1]
+    assert latest_view(recorder)["title"] == "Request path"
+
+
+def test_too_many_nodes_schedules_a_retrospect() -> None:
+    many = 'title "Big"\n' + "\n".join(f'n{i} "Node {i}"' for i in range(10))
+    drawer = FakeDrawer(many)
+    drawer.retrospect_answers = ['title "Big"\nn0 "Node 0"\nn1 "Node 1"']
+    sketch, recorder = pipeline(FakeJudge(FIRST), drawer, retrospect_every_n=0, retrospect_max_nodes=9)
+    sketch.route(segment("Lots of nodes."))
+    sketch.draw_next()
+    sketch.retrospect_if_due()
+
+    assert drawer.retrospect_calls == [1]
+    assert len(latest_view(recorder)["nodes"]) == 2

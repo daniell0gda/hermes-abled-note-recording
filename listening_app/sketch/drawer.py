@@ -12,6 +12,7 @@ from listening_app.transcriber import grok_access_token, grok_api_base, import_l
 DRAW_TIMEOUT_S = 15.0
 MAX_TOKENS = 1500
 MAX_NODES = 12
+RETROSPECT_MAX_NODES = 9
 
 KIND_HINTS = {
     DiagramKind.FLOW: "Nodes are components or steps; edges are calls or data flow.",
@@ -38,6 +39,15 @@ FORMAT_RULES = (
     '"This", "here" or "that one" means the element the speaker pointed at while saying it.'
 )
 ANSWER_RULE = "Return ONLY the complete updated diagram, no fences, no prose."
+
+RETROSPECT_RULES = (
+    "Revise the whole diagram against everything the speaker said. Later statements win over earlier ones: "
+    "when the speaker corrects themselves, drop the contradicted nodes, edges and labels. "
+    "Merge duplicate nodes that mean the same thing; delete orphans with no edges unless the speaker named them; "
+    "fix dangling edges. Keep existing ids whenever the same element remains. "
+    f"At most {RETROSPECT_MAX_NODES} nodes — drop the least important ones if needed. "
+    "Do not invent elements the speaker never mentioned."
+)
 
 _EXISTING_HEADER = re.compile(r"^diagram\s+(\d+)$")
 _NEW_HEADER = re.compile(rf"^diagram\s+new\s+({'|'.join(kind.value for kind in DiagramKind)})$")
@@ -138,6 +148,19 @@ class Drawer:
             "Summary so far:", diagram.summary or "(none)", "", "New transcript lines:", *lines,
         ])
         return self._complete(prompt).strip()
+
+    def retrospect(self, diagram: Diagram) -> str:
+        """A cleaned-up full diagram that reconciles corrections across the whole transcript."""
+        prompt = "\n".join([
+            f"You revise a live {diagram.kind.value} diagram so it matches everything the speaker said, "
+            "not only the latest lines.",
+            FORMAT_RULES, RETROSPECT_RULES, KIND_HINTS[diagram.kind], self._language_rule, ANSWER_RULE, "",
+            "Current diagram:", diagram.structure.to_text() or "(empty)", "",
+            *_transcript_section(diagram),
+            *_selection_section(diagram),
+            "Produce the complete revised diagram now.",
+        ])
+        return self._complete(prompt)
 
     def _complete(self, prompt: str) -> str:
         return self._completion(self._model, [{"role": "user", "content": prompt}], self._credentials())

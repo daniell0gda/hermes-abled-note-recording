@@ -44,7 +44,12 @@ class LiveSketch:
         jev_key = config.jev_key()
         self._jev = JevClient(jev_key.value, sketch.jev_model) if jev_key.value else None
         drawer = Drawer(sketch.draw_model, credentials_provider(config), sketch.label_language)
-        self._pipeline = SketchPipeline(drawer, self._jev, self)
+        self._pipeline = SketchPipeline(
+            drawer, self._jev, self,
+            retrospect_every_n=sketch.retrospect_every_n,
+            retrospect_on_correction=sketch.retrospect_on_correction,
+            retrospect_max_nodes=sketch.retrospect_max_nodes,
+        )
         self._pointer = PointerTracker(sketch.point_radius_px, sketch.point_window_s)
         self._pointer_lock = threading.Lock()
         self.folder = config.output_path() / DIAGRAMS_FOLDER / new_session_id(datetime.now().astimezone())
@@ -161,6 +166,7 @@ class LiveSketch:
         segment = transcription.segment
         if segment.source is not Source.ME or transcription.status is not SegmentStatus.OK:
             return
+        log.info("Live sketch heard: %s", transcription.text)
         start = segment.wall_start.timestamp()
         with self._pointer_lock:
             pointed = self._pointer.pointed_during(start, start + segment.end - segment.start)

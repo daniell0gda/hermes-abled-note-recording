@@ -157,6 +157,9 @@ def test_sketch_defaults(config_file: Path) -> None:
     assert sketch.label_language is Language.AUTO
     assert sketch.point_radius_px == 24
     assert sketch.point_window_s == 2
+    assert sketch.retrospect_every_n == 5
+    assert sketch.retrospect_on_correction is True
+    assert sketch.retrospect_max_nodes == 9
 
 
 def test_typesafe_environment_variable_wins_over_the_sketch_key(config_file: Path,
