@@ -5,6 +5,8 @@ import logging
 import secrets
 import threading
 import time
+
+import numpy as np
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from functools import partial
@@ -92,6 +94,41 @@ class RecordingSession:
         self._store: TranscriptStore | None = None
         self._transcriber: Transcriber | None = None
         self._listener: Callable[[Transcription], None] | None = None
+        self._paused = False
+
+    @property
+    def is_paused(self) -> bool:
+        return self._paused
+
+    def pause(self) -> bool:
+        """Stop segmenting and transcribing new audio. Returns False if already paused."""
+        with self._segmenter_lock:
+            if self._paused:
+                return False
+            self._paused = True
+            pending = [(source, self._segmenters[source].flush()) for source in self._segmenters]
+        for source, speech in pending:
+            if speech is not None:
+                self._submit(source, speech)
+        log.info("Session %s paused", self.session_id)
+        return True
+
+    def resume(self) -> bool:
+        """Continue after pause. Returns False if not paused."""
+        with self._segmenter_lock:
+            if not self._paused:
+                return False
+            self._paused = False
+        log.info("Session %s resumed", self.session_id)
+        return True
+
+    def toggle_pause(self) -> bool:
+        """Toggle pause/resume. Returns True when the session is paused afterwards."""
+        if self._paused:
+            self.resume()
+            return False
+        self.pause()
+        return True
 
     def listen(self, handler: Callable[[Transcription], None] | None) -> None:
         """Also hand every transcription to `handler` once it is stored and sent; None stops it.
@@ -185,7 +222,14 @@ class RecordingSession:
         self.files.folder.rmdir()
 
     def _on_audio(self, source: Source, samples: Audio) -> None:
-        for speech in self._segmenters[source].feed(samples):
+        with self._segmenter_lock:
+            if self._paused:
+                # Keep the sample clock advancing with silence so timestamps stay on wall time.
+                silence = np.zeros(len(samples), dtype=np.float32)
+                self._segmenters[source].feed(silence)
+                return
+            speeches = list(self._segmenters[source].feed(samples))
+        for speech in speeches:
             self._submit(source, speech)
 
     def _on_lost(self, source: Source, reason: str) -> None:

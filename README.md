@@ -66,6 +66,7 @@ All options are documented in [`config.example.yaml`](config.example.yaml). The 
 | `output_dir` | `%USERPROFILE%\Documents\MeetingTranscripts` | where transcripts go |
 | `save_audio` | `false` | keep every segment WAV (failed segments are always kept) |
 | `hotkey` | `ctrl+alt+r` | global Start/Stop; `""` disables it |
+| `pause_hotkey` | `ctrl+shift+p` | pause/resume transcription while recording; `""` disables it |
 | `notifications` | `true` | pop-ups; `false` hides them (they are still logged), the icon still shows state |
 | `segmentation.*` | 800 / 30 / 400 / 200 / 0.5 | pause ms, max segment s, min segment ms, padding ms, VAD threshold |
 | `stt.selected`, `stt.models` | Groq whisper-large-v3-turbo | any litellm transcription model string |
@@ -86,7 +87,7 @@ All options are documented in [`config.example.yaml`](config.example.yaml). The 
 
 ## Using it
 
-Tray menu: Start/Stop recording (also a left click, or the hotkey), Live sketch (on/off), Microphone ▸, Audio output ▸,
+Tray menu: Start/Stop recording (also a left click, or the hotkey), Pause/Resume (Ctrl+Shift+P while recording), Live sketch (on/off), Microphone ▸, Audio output ▸,
 Transcription model ▸, Authorize Grok (only with `providers.xai.grok_auth: true`), Hermes streaming on/off,
 Hermes endpoint ▸ (`/responses`, `/chat/completions` or raw), Refresh devices, Finalize unfinished sessions (only shown
 when there are any), Open transcripts folder, Open diagrams folder, Open config file, Reload config, Quit.

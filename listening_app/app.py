@@ -55,6 +55,8 @@ class AppController:
         self._hermes_error: str | None = None
         self._hotkey: GlobalHotkey | None = None
         self._hotkey_text = ""
+        self._pause_hotkey: GlobalHotkey | None = None
+        self._pause_hotkey_text = ""
         self._sketch_lock = threading.RLock()
         self._sketch: LiveSketch | None = None
         self._sketch_busy = False
@@ -73,6 +75,7 @@ class AppController:
         threading.Thread(target=import_litellm, name="litellm-preload", daemon=True).start()
         self._check_grok_authorization_in_background()
         self._register_hotkey(self.config.hotkey)
+        self._register_pause_hotkey(self.config.pause_hotkey)
         self._register_sketch_hotkey(self.config.sketch.hotkey)
         self._restore_outboxes()
         self._scan_unfinished(announce=True)
@@ -85,6 +88,7 @@ class AppController:
         if session is not None:
             self._stop_session(session)
         self._unregister_hotkey()
+        self._unregister_pause_hotkey()
         self._unregister_sketch_hotkey()
         self._hermes.close()
         self._audio.close()
@@ -98,6 +102,11 @@ class AppController:
     @property
     def is_recording(self) -> bool:
         return self._session is not None
+
+    @property
+    def is_paused(self) -> bool:
+        session = self._session
+        return session is not None and session.is_paused
 
     @property
     def session_id(self) -> str | None:
@@ -131,6 +140,10 @@ class AppController:
     @property
     def hotkey_label(self) -> str:
         return _hotkey_label(self._hotkey_text) if self._hotkey else ""
+
+    @property
+    def pause_hotkey_label(self) -> str:
+        return _hotkey_label(self._pause_hotkey_text) if self._pause_hotkey else ""
 
     @property
     def is_sketching(self) -> bool:
@@ -171,6 +184,18 @@ class AppController:
         self._refresh()
         worker = self._stop_worker if recording else self._start_worker
         threading.Thread(target=worker, name="session-control", daemon=True).start()
+
+    def toggle_pause(self) -> None:
+        """Pause or resume live transcription while a recording is active. No-op when idle."""
+        session = self._session
+        if session is None or self._busy:
+            return
+        paused = session.toggle_pause()
+        if paused:
+            self.notify("Recording paused", "Transcription is paused. Nothing new is saved until you resume.")
+        else:
+            self.notify("Recording resumed", "Transcription continues.")
+        self._refresh()
 
     def start_recording(self) -> str:
         """Start on the calling thread and return the session id, for callers that wait for the result."""
@@ -454,6 +479,9 @@ class AppController:
         if config.hotkey != self._hotkey_text:
             self._unregister_hotkey()
             self._register_hotkey(config.hotkey)
+        if config.pause_hotkey != self._pause_hotkey_text:
+            self._unregister_pause_hotkey()
+            self._register_pause_hotkey(config.pause_hotkey)
         if config.sketch.hotkey != self._sketch_hotkey_text:
             self._unregister_sketch_hotkey()
             self._register_sketch_hotkey(config.sketch.hotkey)
@@ -466,6 +494,15 @@ class AppController:
         if self._hotkey is not None:
             self._hotkey.stop()
             self._hotkey = None
+
+    def _register_pause_hotkey(self, text: str) -> None:
+        self._pause_hotkey_text = text
+        self._pause_hotkey = self._start_hotkey(text, self.toggle_pause)
+
+    def _unregister_pause_hotkey(self) -> None:
+        if self._pause_hotkey is not None:
+            self._pause_hotkey.stop()
+            self._pause_hotkey = None
 
     def _register_sketch_hotkey(self, text: str) -> None:
         self._sketch_hotkey_text = text

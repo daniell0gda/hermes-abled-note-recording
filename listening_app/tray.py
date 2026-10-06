@@ -15,6 +15,7 @@ APP_TITLE = "Listening App"
 _SIZE = 64
 _GREY = "#8a8a8a"
 _RED = "#d93025"
+_ORANGE = "#e8710a"
 _YELLOW = "#f9ab00"
 _DARK = "#202124"
 _TOOLTIP_LIMIT = 127
@@ -28,19 +29,32 @@ Item = pystray.MenuItem
 Menu = pystray.Menu
 
 
-def make_icon(recording: bool, error: bool) -> Image.Image:
-    """Grey = idle, red = recording, yellow "!" = error (a yellow badge while recording)."""
+def make_icon(recording: bool, error: bool, paused: bool = False) -> Image.Image:
+    """Grey = idle, red = recording, orange = paused, yellow "!" = error (a yellow badge while recording)."""
     image = Image.new("RGBA", (_SIZE, _SIZE), (0, 0, 0, 0))
     draw = ImageDraw.Draw(image)
     if error and not recording:
         draw.ellipse((2, 2, 62, 62), fill=_YELLOW)
         _draw_exclamation(draw, 32, 32, 1.0)
         return image
-    draw.ellipse((2, 2, 62, 62), fill=_RED if recording else _GREY)
+    if recording and paused:
+        fill = _ORANGE
+    elif recording:
+        fill = _RED
+    else:
+        fill = _GREY
+    draw.ellipse((2, 2, 62, 62), fill=fill)
+    if recording and paused:
+        _draw_pause_bars(draw)
     if error:
         draw.ellipse((32, 32, 63, 63), fill=_YELLOW, outline=_DARK, width=2)
         _draw_exclamation(draw, 47.5, 47.5, 0.5)
     return image
+
+
+def _draw_pause_bars(draw: ImageDraw.ImageDraw) -> None:
+    draw.rectangle((22, 18, 30, 46), fill=_DARK)
+    draw.rectangle((34, 18, 42, 46), fill=_DARK)
 
 
 def _draw_exclamation(draw: ImageDraw.ImageDraw, x: float, y: float, scale: float) -> None:
@@ -67,13 +81,18 @@ class TrayApp:
 
     def refresh(self) -> None:
         controller = self._controller
-        self._icon.icon = make_icon(controller.is_recording, controller.error is not None)
+        self._icon.icon = make_icon(controller.is_recording, controller.error is not None, controller.is_paused)
         self._icon.title = self._tooltip()[:_TOOLTIP_LIMIT]
         self._icon.update_menu()
 
     def _tooltip(self) -> str:
         controller = self._controller
-        state = "Recording" if controller.is_recording else "Idle"
+        if controller.is_recording and controller.is_paused:
+            state = "Paused"
+        elif controller.is_recording:
+            state = "Recording"
+        else:
+            state = "Idle"
         sketch = " - Live sketch" if controller.is_sketching else ""
         return f"{APP_TITLE} - {state}{sketch}" + (f" - {controller.error}" if controller.error else "")
 
@@ -83,6 +102,11 @@ class TrayApp:
             return "Working..."
         label = "Stop recording" if controller.is_recording else "Start recording"
         return f"{label}\t{controller.hotkey_label}" if controller.hotkey_label else label
+
+    def _pause_label(self) -> str:
+        controller = self._controller
+        label = "Resume" if controller.is_paused else "Pause"
+        return f"{label}\t{controller.pause_hotkey_label}" if controller.pause_hotkey_label else label
 
     def _sketch_label(self) -> str:
         controller = self._controller
@@ -96,6 +120,8 @@ class TrayApp:
         controller = self._controller
         devices = controller.config.devices
         yield Item(self._record_label(), _safe(controller.toggle_recording), default=True, enabled=not controller.is_busy)
+        yield Item(self._pause_label(), _safe(controller.toggle_pause),
+                   enabled=controller.is_recording and not controller.is_busy)
         yield Item(self._sketch_label(), _safe(controller.toggle_sketch), checked=lambda _: controller.is_sketching,
                    enabled=not controller.is_sketch_busy)
         yield Menu.SEPARATOR
