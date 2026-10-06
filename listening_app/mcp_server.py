@@ -5,6 +5,7 @@ import threading
 from collections import deque
 from collections.abc import Callable
 from datetime import datetime
+from pathlib import Path
 from typing import Annotated
 
 from mcp.server.mcpserver import MCPServer
@@ -16,6 +17,7 @@ from listening_app import __version__
 from listening_app.app import PRIVACY_REMINDER, AppController, ControlError
 from listening_app.config import PayloadMode
 from listening_app.models import TranscriptSegment
+from listening_app.sketch.controller import LiveSketch
 from listening_app.transcript_store import (
     FinalTranscript,
     SessionFiles,
@@ -28,6 +30,7 @@ from listening_app.transcript_store import (
 SERVER_NAME = "listening-app"
 NOTIFICATION_HISTORY = 20
 MAX_SEGMENTS_PER_CALL = 200
+SKETCH_WAIT_S = 120.0
 _SESSION_ID = re.compile(r"[\w-]+")
 _READ_ONLY = ToolAnnotations(read_only_hint=True)
 
@@ -37,7 +40,10 @@ microphone, "others" is the system audio of the selected output device.
 Typical flow: start_recording, then get_transcript again and again with the returned next_offset to follow the \
 meeting live, then stop_recording. The other participants must be told that the meeting is transcribed: remind the \
 user when a recording starts.
-Device and model selections are saved to the config file and apply to the next recording."""
+Device and model selections are saved to the config file and apply to the next recording.
+Live sketch draws diagrams in a window on the user's screen from an explanation. Instead of the user talking, you \
+can write the explanation: start_sketch, then sketch_text with a few sentences at a time, the way a person explains \
+it out loud, then stop_sketch. Every diagram is saved as a self-contained HTML file."""
 
 
 class Notification(BaseModel):
@@ -103,6 +109,22 @@ class Transcript(BaseModel):
     has_more: bool = Field(description="More segments are available right now")
 
 
+class SketchDiagram(BaseModel):
+    number: int
+    title: str
+    kind: str
+    active: bool = Field(description="The diagram shown in the window")
+    file: str | None = Field(description="The diagram's HTML page; null until it is first saved")
+
+
+class Sketch(BaseModel):
+    on: bool
+    busy: bool = Field(description="Live sketch is being switched on or off")
+    drawing: bool = Field(description="Text is still being routed or drawn; later revisions can follow")
+    folder: str | None = Field(description="Where the diagrams of this live sketch are saved")
+    diagrams: list[SketchDiagram]
+
+
 class McpApp:
     """The headless counterpart of TrayApp: MCP tools instead of the menu, notifications kept for get_status."""
 
@@ -111,11 +133,12 @@ class McpApp:
         self._notifications: deque[Notification] = deque(maxlen=NOTIFICATION_HISTORY)
         self._lock = threading.Lock()
         self.server: MCPServer = MCPServer(SERVER_NAME, instructions=INSTRUCTIONS, version=__version__)
-        for query in (self.get_status, self.list_devices, self.list_sessions, self.get_transcript):
+        for query in (self.get_status, self.list_devices, self.list_sessions, self.get_transcript, self.get_sketch):
             self.server.add_tool(query, annotations=_READ_ONLY)
         for action in (self.start_recording, self.stop_recording, self.select_microphone, self.select_output,
                        self.select_model, self.set_hermes_streaming, self.set_hermes_endpoint, self.refresh_devices,
-                       self.finalize_unfinished_sessions, self.reload_config, self.authorize_grok):
+                       self.finalize_unfinished_sessions, self.reload_config, self.authorize_grok,
+                       self.start_sketch, self.sketch_text, self.stop_sketch):
             self.server.add_tool(action)
 
     def run(self, on_ready: Callable[[], None]) -> None:
@@ -188,6 +211,10 @@ class McpApp:
         return Transcript(session_id=files.session_id, recording=self._is_recording(files), segments=page,
                           next_offset=next_offset, has_more=next_offset < len(segments))
 
+    def get_sketch(self) -> Sketch:
+        """Whether live sketch is on, and its diagrams with the files they are saved in."""
+        return self._sketch_state(self._controller.sketch)
+
     # Actions
 
     def start_recording(self) -> RecordingStarted:
@@ -259,7 +286,51 @@ class McpApp:
         self._controller.authorize_grok()
         return self.get_status()
 
+    def start_sketch(
+        self, listen: Annotated[bool, Field(
+            description="Also draw from what the user says into the microphone; off = only from sketch_text")] = False,
+    ) -> Sketch:
+        """Open the live sketch window. The user can still turn the microphone on or off in the window."""
+        _control(lambda: self._controller.start_sketch(listen))
+        return self.get_sketch()
+
+    def sketch_text(
+        self,
+        text: Annotated[str, Field(min_length=1, description="Explanation in plain spoken sentences")],
+        wait: Annotated[bool, Field(description="Return after the text is drawn, at most "
+                                                f"{SKETCH_WAIT_S:.0f} s; off = return at once")] = True,
+    ) -> Sketch:
+        """Draw from text as if the user had said it. Each sentence is one spoken line; a new topic opens a new
+        diagram."""
+        sketch = self._controller.sketch
+        if sketch is None:
+            raise ToolError("Live sketch is off. Call start_sketch first.")
+        sketch.say(text)
+        if wait:
+            sketch.wait_until_drawn(SKETCH_WAIT_S)
+        return self._sketch_state(sketch)
+
+    def stop_sketch(self) -> Sketch:
+        """Close the live sketch window. The diagrams stay saved in the folder."""
+        sketch = self._controller.sketch
+        if sketch is None:
+            raise ToolError("Live sketch is off")
+        drawn = self._sketch_state(sketch)
+        _control(self._controller.stop_sketch)
+        return drawn.model_copy(update={"on": False, "busy": False, "drawing": False})
+
     # Internals
+
+    def _sketch_state(self, sketch: LiveSketch | None) -> Sketch:
+        busy = self._controller.is_sketch_busy
+        if sketch is None:
+            return Sketch(on=False, busy=busy, drawing=False, folder=None, diagrams=[])
+        state = sketch.snapshot()
+        diagrams = [SketchDiagram(number=view["number"], title=view["title"], kind=view["kind"],
+                                  active=view["number"] == state.active, file=_optional_str(sketch.file(view["number"])))
+                    for view in state.views]
+        return Sketch(on=True, busy=busy, drawing=not sketch.wait_until_drawn(0), folder=str(sketch.folder),
+                      diagrams=diagrams)
 
     def _summary(self, files: SessionFiles) -> SessionSummary:
         meta = read_meta(files)
@@ -300,6 +371,10 @@ def _control[T](action: Callable[[], T]) -> T:
 def _require_known(value: str | None, known: list[str], kind: str) -> None:
     if value is not None and value not in known:
         raise ToolError(f"Unknown {kind} '{value}'. Choose one of: {', '.join(known)}")
+
+
+def _optional_str(path: Path | None) -> str | None:
+    return str(path) if path is not None else None
 
 
 def _now() -> str:

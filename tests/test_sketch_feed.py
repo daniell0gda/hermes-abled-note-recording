@@ -2,7 +2,7 @@ from collections.abc import Callable
 
 import pytest
 
-from listening_app.sketch.feed import SketchFeed
+from listening_app.sketch.feed import SketchFeed, typed_lines
 from listening_app.transcriber import Transcription
 
 Handler = Callable[[Transcription], None]
@@ -182,6 +182,28 @@ def test_a_muted_sketch_opens_no_microphone_when_the_recording_stops() -> None:
     feed.use_microphone()
 
     assert feeds.microphones == []
+
+
+def test_a_sketch_started_muted_opens_no_microphone() -> None:
+    feeds = Feeds()
+    feed = SketchFeed(handler, feeds.open_microphone)
+    feed.mute()
+
+    feed.start(None)
+
+    assert feeds.microphones == []
+    assert not feed.listening
+
+
+def test_typed_text_is_cut_into_one_line_per_sentence() -> None:
+    text = "The user logs in.  Is the password right?\n\nYes!   Then the  token\nis issued"
+
+    assert typed_lines(text) == ["The user logs in.", "Is the password right?", "Yes!", "Then the token",
+                                 "is issued"]
+
+
+def test_typed_text_without_words_gives_no_lines() -> None:
+    assert typed_lines(" \n\n ") == []
 
 
 def test_a_microphone_that_cannot_open_keeps_the_sketch_muted() -> None:

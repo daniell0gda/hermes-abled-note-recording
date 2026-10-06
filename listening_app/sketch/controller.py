@@ -4,6 +4,7 @@ import logging
 import threading
 from collections.abc import Callable
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from listening_app.clipboard import copy_text
@@ -13,7 +14,7 @@ from listening_app.models import SegmentStatus, Source
 from listening_app.session import Notify, RecordingSession, new_session_id
 from listening_app.sketch.drawer import Drawer, SpokenLine, credentials_provider
 from listening_app.sketch.export import DiagramFiles
-from listening_app.sketch.feed import SketchFeed, TranscriptionHandler
+from listening_app.sketch.feed import SketchFeed, TranscriptionHandler, typed_lines
 from listening_app.sketch.jev_client import JevClient
 from listening_app.sketch.microphone import MicTranscription
 from listening_app.sketch.pipeline import SketchPipeline, SketchState
@@ -69,8 +70,10 @@ class LiveSketch:
             "microphone": self._microphone_toggled, "copy-path": self._copy_path,
         }
 
-    def start(self, recording: RecordingSession | None) -> None:
-        """Raises when drawing or listening cannot start (Grok not authorized, no microphone)."""
+    def start(self, recording: RecordingSession | None, listen: bool = True) -> None:
+        """Raises when drawing or listening cannot start (Grok not authorized, no microphone).
+
+        With `listen` off the microphone stays muted until it is turned on in the window."""
         if self._config.draw_key().source is KeySource.GROK_AUTH:
             grok_access_token()
         if self._jev is None:
@@ -80,11 +83,13 @@ class LiveSketch:
         self._window.open()
         try:
             with self._feed_lock:
+                if not listen:
+                    self._feed.mute()
                 self._feed.start(recording)
         except Exception:
             self.stop()
             raise
-        self._window.microphone(True)
+        self._window.microphone(listen)
 
     def stop(self) -> None:
         with self._feed_lock:
@@ -106,6 +111,23 @@ class LiveSketch:
         except Exception as exc:
             log.exception("Live sketch could not listen to the microphone on its own")
             self._notify("Live sketch stopped listening", str(exc))
+
+    def say(self, text: str) -> None:
+        """Draw from typed text as if the speaker had said it, one sentence at a time."""
+        for line in typed_lines(text):
+            log.info("Live sketch read: %s", line)
+            self._pipeline.add(SpokenLine(line))
+
+    def wait_until_drawn(self, timeout_s: float) -> bool:
+        """False when lines are still being routed or drawn after `timeout_s`."""
+        return self._pipeline.wait_until_idle(timeout_s)
+
+    def snapshot(self) -> SketchState:
+        return self._pipeline.snapshot()
+
+    def file(self, number: int) -> Path | None:
+        """The HTML page diagram `number` was last saved to, or None before its first save."""
+        return self._files.path(number)
 
     # SketchListener
 

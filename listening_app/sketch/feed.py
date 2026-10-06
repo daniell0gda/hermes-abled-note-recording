@@ -1,11 +1,19 @@
 """Where live sketch hears the speaker: the running recording, or its own microphone-only transcription."""
 
+import re
 from collections.abc import Callable
 from typing import Protocol
 
 from listening_app.transcriber import Transcription
 
 TranscriptionHandler = Callable[[Transcription], None]
+
+_SENTENCE_END = re.compile(r"(?<=[.!?])\s+|\n+")
+
+
+def typed_lines(text: str) -> list[str]:
+    """Typed text cut into the sentence-sized lines a transcription would deliver."""
+    return [line for part in _SENTENCE_END.split(text) if (line := " ".join(part.split()))]
 
 
 class Microphone(Protocol):

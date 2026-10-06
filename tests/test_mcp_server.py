@@ -15,6 +15,8 @@ from listening_app.logging_setup import RedactingFormatter
 from listening_app.mcp_server import McpApp
 from listening_app.models import HermesStatus, SegmentStatus, Source, TranscriptSegment
 from listening_app.session import SessionError
+from listening_app.sketch.feed import typed_lines
+from listening_app.sketch.pipeline import SketchState
 from listening_app.transcript_store import Devices, SessionFiles, SessionMeta, TranscriptStore
 
 SESSION = "2026-09-29T10-00-00_ab12"
@@ -61,6 +63,38 @@ class FakeSession:
         return self.files
 
 
+class FakeSketch:
+    """Stands in for LiveSketch: each typed sentence becomes a diagram node instead of a Grok drawing."""
+
+    started: list["FakeSketch"] = []
+
+    def __init__(self, config: AppConfig, *_: object, **__: object) -> None:
+        self.folder = config.output_path() / "diagrams" / SESSION
+        self.listening: bool | None = None
+        self.lines: list[str] = []
+        self.stopped = False
+
+    def start(self, recording: object, listen: bool = True) -> None:
+        self.listening = listen
+        FakeSketch.started.append(self)
+
+    def stop(self) -> None:
+        self.stopped = True
+
+    def say(self, text: str) -> None:
+        self.lines += typed_lines(text)
+
+    def wait_until_drawn(self, timeout_s: float) -> bool:
+        return True
+
+    def snapshot(self) -> SketchState:
+        view = {"number": 1, "title": "Login", "kind": "flowchart", "nodes": self.lines}
+        return SketchState(views=(view,) if self.lines else (), active=1 if self.lines else None, updated=None)
+
+    def file(self, number: int) -> Path | None:
+        return self.folder / f"{number:02d}-login.html"
+
+
 class FailingSession(FakeSession):
     def start(self) -> None:
         raise SessionError("No usable microphone or audio output found")
@@ -85,6 +119,8 @@ def transcripts(tmp_path: Path) -> Path:
 def headless(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> McpApp:
     monkeypatch.setattr(app, "AudioSystem", FakeAudio)
     monkeypatch.setattr(app, "RecordingSession", FakeSession)
+    monkeypatch.setattr(app, "LiveSketch", FakeSketch)
+    monkeypatch.setattr(FakeSketch, "started", [])
     path = tmp_path / "config.yaml"
     path.write_text(CONFIG.format(output=transcripts(tmp_path).as_posix()), encoding="utf-8")
     configs = ConfigManager(path)
@@ -127,8 +163,9 @@ def test_queries_are_marked_read_only_and_actions_are_not(headless: McpApp) -> N
 
     read_only = {tool.name for tool in tools if tool.annotations and tool.annotations.read_only_hint}
 
-    assert read_only == {"get_status", "list_devices", "list_sessions", "get_transcript"}
-    assert {"start_recording", "stop_recording", "select_microphone", "select_model"} <= {tool.name for tool in tools}
+    assert read_only == {"get_status", "list_devices", "list_sessions", "get_transcript", "get_sketch"}
+    assert {"start_recording", "stop_recording", "select_microphone", "select_model",
+            "start_sketch", "sketch_text", "stop_sketch"} <= {tool.name for tool in tools}
 
 
 def test_status_shows_the_idle_app_and_its_selections(headless: McpApp) -> None:
@@ -255,3 +292,53 @@ def test_sessions_are_listed_newest_first(headless: McpApp, tmp_path: Path) -> N
     assert sessions[0]["ended_at"] == "2026-09-29T11:00:00+02:00"
     assert sessions[0]["finalized"] is False
     assert sessions[0]["recording"] is False
+
+
+def test_live_sketch_started_by_an_agent_keeps_the_microphone_off(headless: McpApp) -> None:
+    started = data(call(headless, "start_sketch"))
+
+    assert started["on"] is True
+    assert started["diagrams"] == []
+    assert [sketch.listening for sketch in FakeSketch.started] == [False]
+
+
+def test_live_sketch_can_also_listen_to_the_microphone(headless: McpApp) -> None:
+    data(call(headless, "start_sketch", listen=True))
+
+    assert [sketch.listening for sketch in FakeSketch.started] == [True]
+
+
+def test_typed_text_is_drawn_and_its_diagram_file_is_returned(headless: McpApp) -> None:
+    data(call(headless, "start_sketch"))
+
+    drawn = data(call(headless, "sketch_text", text="The user logs in. The server checks the password."))
+
+    assert FakeSketch.started[0].lines == ["The user logs in.", "The server checks the password."]
+    assert drawn["drawing"] is False
+    assert drawn["diagrams"] == [{"number": 1, "title": "Login", "kind": "flowchart", "active": True,
+                                  "file": str(FakeSketch.started[0].file(1))}]
+
+
+def test_stopping_live_sketch_returns_the_saved_diagrams(headless: McpApp) -> None:
+    data(call(headless, "start_sketch"))
+    data(call(headless, "sketch_text", text="The user logs in."))
+
+    stopped = data(call(headless, "stop_sketch"))
+
+    assert stopped["on"] is False
+    assert [diagram["title"] for diagram in stopped["diagrams"]] == ["Login"]
+    assert FakeSketch.started[0].stopped is True
+    assert data(call(headless, "get_sketch"))["on"] is False
+
+
+def test_live_sketch_in_the_wrong_state_is_refused(headless: McpApp) -> None:
+    text_while_off = call(headless, "sketch_text", text="The user logs in.")
+    stop_while_off = call(headless, "stop_sketch")
+    data(call(headless, "start_sketch"))
+    start_again = call(headless, "start_sketch")
+
+    assert text_while_off.is_error
+    assert "start_sketch" in error_text(text_while_off)
+    assert stop_while_off.is_error
+    assert start_again.is_error
+    assert "already on" in error_text(start_again)

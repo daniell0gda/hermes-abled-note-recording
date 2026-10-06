@@ -156,6 +156,9 @@ process and controls it through these tools:
 | `select_model` | one of `stt.models` |
 | `set_hermes_streaming`, `set_hermes_endpoint` | Hermes on/off and the payload mode |
 | `finalize_unfinished_sessions`, `reload_config`, `authorize_grok` | as in the tray menu |
+| `start_sketch` / `stop_sketch` | open or close the live sketch window; the microphone stays off unless `listen` is true |
+| `sketch_text` | draw from typed text as if you had said it, one line per sentence; returns the diagrams and their HTML files |
+| `get_sketch` | whether live sketch is on, its diagrams and their files |
 
 Register it in Claude Code:
 

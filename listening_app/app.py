@@ -1,5 +1,6 @@
 """Application controller: owns the long-lived services and implements every tray action."""
 
+import contextlib
 import logging
 import os
 import subprocess
@@ -154,6 +155,10 @@ class AppController:
         return self._sketch_busy
 
     @property
+    def sketch(self) -> LiveSketch | None:
+        return self._sketch
+
+    @property
     def sketch_hotkey_label(self) -> str:
         return _hotkey_label(self._sketch_hotkey_text) if self._sketch_hotkey else ""
 
@@ -222,6 +227,25 @@ class AppController:
         self._refresh()
         worker = self._stop_sketch_worker if self._sketch is not None else self._start_sketch_worker
         threading.Thread(target=worker, name="sketch-control", daemon=True).start()
+
+    def start_sketch(self, listen: bool) -> Path:
+        """Switch live sketch on, on the calling thread, and return the folder its diagrams are saved in."""
+        self._begin_sketch_transition(while_sketching=False)
+        try:
+            return self._start_sketch(listen).folder
+        finally:
+            self._end_sketch_transition()
+
+    def stop_sketch(self) -> Path:
+        """Switch live sketch off, on the calling thread, and return the folder its diagrams are saved in."""
+        self._begin_sketch_transition(while_sketching=True)
+        try:
+            folder = self._stop_sketch()
+        finally:
+            self._end_sketch_transition()
+        if folder is None:
+            raise ControlError("Live sketch is off")
+        return folder
 
     def select_mic(self, name: str | None) -> None:
         self._save(("devices", "mic"), name)
@@ -382,40 +406,59 @@ class AppController:
         self._finish_transition(None)
         return transcript
 
+    def _begin_sketch_transition(self, while_sketching: bool) -> None:
+        """Claim the live sketch on/off slot. Refused while busy, or unless is_sketching equals `while_sketching`."""
+        with self._sketch_lock:
+            if self._sketch_busy:
+                raise ControlError("Live sketch is being switched on or off right now")
+            if self.is_sketching is not while_sketching:
+                raise ControlError("Live sketch is already on" if self.is_sketching else "Live sketch is off")
+            self._sketch_busy = True
+        self._refresh()
+
+    def _end_sketch_transition(self) -> None:
+        with self._sketch_lock:
+            self._sketch_busy = False
+        self._refresh()
+
     def _start_sketch_worker(self) -> None:
+        with contextlib.suppress(ControlError):
+            self._start_sketch(listen=True)
+        self._end_sketch_transition()
+
+    def _start_sketch(self, listen: bool) -> LiveSketch:
+        """Raises ControlError, after the failure was announced, when live sketch cannot start."""
         with self._sketch_lock:
             sketch = LiveSketch(self.config, self._audio, self.notify, on_closed=self._sketch_window_closed)
             recording = self._session if not self._busy else None
             try:
                 with com_initialized():
-                    sketch.start(recording)
+                    sketch.start(recording, listen)
             except Exception as exc:
                 log.exception("Live sketch could not start")
                 self.notify("Live sketch could not start", str(exc))
-            else:
-                self._sketch = sketch
-                self.notify("Live sketch on", f"Explain what you want drawn. Diagrams are saved in {sketch.folder}")
-            finally:
-                self._sketch_busy = False
-        self._refresh()
+                raise ControlError(str(exc)) from exc
+            self._sketch = sketch
+            self.notify("Live sketch on", f"Explain what you want drawn. Diagrams are saved in {sketch.folder}")
+        return sketch
 
     def _stop_sketch_worker(self) -> None:
         self._stop_sketch()
-        with self._sketch_lock:
-            self._sketch_busy = False
-        self._refresh()
+        self._end_sketch_transition()
 
-    def _stop_sketch(self) -> None:
+    def _stop_sketch(self) -> Path | None:
+        """The folder of the live sketch that was switched off, None when none was on."""
         with self._sketch_lock:
             sketch, self._sketch = self._sketch, None
         if sketch is None:
-            return
+            return None
         try:
             with com_initialized():
                 sketch.stop()
         except Exception:
             log.exception("Stopping live sketch failed")
         self.notify("Live sketch off", f"Diagrams are saved in {sketch.folder}")
+        return sketch.folder
 
     def _sketch_window_closed(self) -> None:
         """The user closed the window: live sketch switches off, as with the hotkey."""
