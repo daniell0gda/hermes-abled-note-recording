@@ -1,15 +1,18 @@
 # Builds dist\ListeningApp\ListeningApp.exe: one folder, no console window.
 # Usage (from the project folder):  .\build.ps1
+#   -DistRoot .gen\dist  builds into that folder instead, leaving dist\ListeningApp alone.
+param([string]$DistRoot = 'dist')
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 $python = Join-Path $root '.venv\Scripts\python.exe'
 $build = Join-Path $root 'build'
-$app = Join-Path $root 'dist\ListeningApp'
+$dist = Join-Path $root $DistRoot
+$app = Join-Path $dist 'ListeningApp'
 
 & $python -m PyInstaller `
     --noconfirm --clean --onedir --noconsole `
     --name ListeningApp `
-    --distpath (Join-Path $root 'dist') `
+    --distpath $dist `
     --workpath $build `
     --specpath $build `
     --add-data "$root\listening_app\assets;listening_app\assets" `
