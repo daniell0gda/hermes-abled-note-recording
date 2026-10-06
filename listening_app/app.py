@@ -39,13 +39,15 @@ class Ui(Protocol):
 
 
 class AppController:
-    def __init__(self, configs: ConfigManager, formatter: RedactingFormatter) -> None:
+    def __init__(self, configs: ConfigManager, formatter: RedactingFormatter, hotkeys: bool = True) -> None:
+        """With `hotkeys` off no global hotkey is registered, so a second instance leaves the tray app's alone."""
         self._configs = configs
         self._formatter = formatter
+        self._hotkeys = hotkeys
         self._audio = AudioSystem()
         config = configs.config
         self._hermes = HermesClient(HermesSettings.from_config(config), config.hermes.enabled, self)
-        self._ui: Ui | None = None
+        self._uis: list[Ui] = []
         self._lock = threading.Lock()
         self._finalize_lock = threading.Lock()
         self._session: RecordingSession | None = None
@@ -66,7 +68,8 @@ class AppController:
         self._unfinished: list[SessionFiles] = []
 
     def attach(self, ui: Ui) -> None:
-        self._ui = ui
+        """Add a frontend that is notified and refreshed, next to the ones attached before."""
+        self._uis.append(ui)
 
     def start_services(self, notices: list[tuple[str, str]], config_error: str | None) -> None:
         self._error = config_error
@@ -357,12 +360,13 @@ class AppController:
 
     def notify(self, title: str, message: str) -> None:
         log.info("Notification: %s - %s", title, message)
-        if self._ui is not None and self.config.notifications:
-            self._ui.notify(title, message)
+        if self.config.notifications:
+            for ui in self._uis:
+                ui.notify(title, message)
 
     def _refresh(self) -> None:
-        if self._ui is not None:
-            self._ui.refresh()
+        for ui in self._uis:
+            ui.refresh()
 
     def _begin_transition(self, while_recording: bool) -> None:
         """Claim the start/stop slot. Refused while busy, or unless is_recording equals `while_recording`."""
@@ -557,7 +561,7 @@ class AppController:
             self._sketch_hotkey = None
 
     def _start_hotkey(self, text: str, action: Callable[[], None]) -> GlobalHotkey | None:
-        if not text:
+        if not (text and self._hotkeys):
             return None
         hotkey = GlobalHotkey(parse_hotkey(text), action)
         try:

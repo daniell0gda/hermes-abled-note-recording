@@ -5,13 +5,16 @@ import logging
 import sys
 from collections.abc import Callable
 from pathlib import Path
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from listening_app import __version__, cli, paths
 from listening_app.app import AppController, Ui
 from listening_app.config import AppConfig, ConfigError, ConfigManager, ensure_config_file, load_config, resolve_config_path
 from listening_app.logging_setup import setup_logging
 from listening_app.tray import TrayApp
+
+if TYPE_CHECKING:
+    from listening_app.mcp_http import McpHttpServer
 
 log = logging.getLogger(__name__)
 
@@ -69,12 +72,15 @@ def run_app(config_path: Path, headless: bool = False) -> int:
     formatter.set_secrets(config.secret_values())
     log.info("Listening App %s starting %s with %s", __version__, "headless (MCP)" if headless else "in the tray",
              config_path)
-    controller = AppController(configs, formatter)
+    controller = AppController(configs, formatter, hotkeys=not headless)
     frontend = _create_frontend(controller, headless)
     controller.attach(frontend)
+    endpoint = None if headless else _serve_mcp(controller, notices)
     try:
         frontend.run(on_ready=lambda: controller.start_services(notices, config_error))
     finally:
+        if endpoint is not None:
+            endpoint.stop()
         controller.shutdown()
     log.info("Listening App stopped")
     return 0
@@ -85,6 +91,26 @@ def _create_frontend(controller: AppController, headless: bool) -> Frontend:
         return TrayApp(controller)
     from listening_app.mcp_server import McpApp
     return McpApp(controller)
+
+
+def _serve_mcp(controller: AppController, notices: list[tuple[str, str]]) -> "McpHttpServer | None":
+    """The tray app's MCP endpoint for AI agents, or None when it is off or its port is taken."""
+    from listening_app.mcp_http import McpHttpServer
+    from listening_app.mcp_server import McpApp
+    settings = controller.config.mcp
+    if not settings.enabled:
+        return None
+    tools = McpApp(controller)
+    try:
+        endpoint = McpHttpServer(tools.server, settings.port)
+    except OSError as exc:
+        log.warning("MCP server not started on port %d: %s", settings.port, exc)
+        notices.append(("MCP server not available", f"Port {settings.port} is in use. Choose another mcp.port."))
+        return None
+    controller.attach(tools)
+    endpoint.start()
+    log.info("MCP server listening on %s", endpoint.url)
+    return endpoint
 
 
 def run_tool(args: argparse.Namespace, config_path: Path) -> int:

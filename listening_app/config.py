@@ -137,6 +137,11 @@ class SketchConfig(_Section):
         return _checked_hotkey(value)
 
 
+class McpConfig(_Section):
+    enabled: bool = True
+    port: int = Field(default=8742, ge=1, le=65535)
+
+
 @dataclass(frozen=True)
 class ApiKey:
     value: str = field(repr=False)
@@ -157,6 +162,7 @@ class AppConfig(_Section):
     providers: dict[str, ProviderConfig] = Field(default_factory=dict)
     hermes: HermesConfig = HermesConfig()
     sketch: SketchConfig = SketchConfig()
+    mcp: McpConfig = McpConfig()
 
     @field_validator("hotkey", "pause_hotkey")
     @classmethod

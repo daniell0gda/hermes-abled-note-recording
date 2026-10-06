@@ -63,3 +63,7 @@ sketch:                       # live sketch: draws what you explain (microphone 
   bucket_b_min_new_lines: 2   # new transcript lines since the last rebuild before another one is due
   bucket_b_debounce_s: 2.0    # start a due rebuild after this quiet spell without live draws
   bucket_b_max_wait_s: 10.0   # ... or at the latest this long after it became due
+
+mcp:                          # MCP server of the tray app, for AI agents on this PC: http://127.0.0.1:<port>/mcp
+  enabled: true
+  port: 8742                  # changes apply after a restart of the app

@@ -39,6 +39,17 @@ def test_notifications_are_shown_by_default(tmp_path: Path, monkeypatch: pytest.
     assert ui.shown == ["Recording started"]
 
 
+def test_notifications_reach_every_attached_frontend(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    controller, tray = controller_with(tmp_path, monkeypatch, "language: pl\n")
+    mcp = RecordingUi()
+    controller.attach(mcp)
+
+    controller.notify("Recording started", "...")
+
+    assert tray.shown == ["Recording started"]
+    assert mcp.shown == ["Recording started"]
+
+
 def test_hidden_notifications_are_only_logged(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
                                               caplog: pytest.LogCaptureFixture) -> None:
     controller, ui = controller_with(tmp_path, monkeypatch, "notifications: false\n")

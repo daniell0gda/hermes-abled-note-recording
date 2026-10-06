@@ -78,6 +78,7 @@ All options are documented in [`config.example.yaml`](config.example.yaml). The 
 | `sketch.draw_model` | `xai/grok-4-fast-non-reasoning` | litellm chat model that draws; its key works like an STT provider key |
 | `sketch.label_language` | `auto` | `auto` (spoken language), `pl` or `en` |
 | `sketch.point_radius_px`, `sketch.point_window_s` | `24`, `2` | how still and how long the mouse must rest to point at an element |
+| `mcp.enabled`, `mcp.port` | `true`, `8742` | the tray app's MCP server for AI agents on this PC; applies after a restart |
 
 - **Tray selections** (devices, model, Hermes on/off, Hermes endpoint) are saved to the file immediately, and your
   comments in it are preserved.
@@ -140,11 +141,10 @@ python -m listening_app --segment-wav talk.wav [--transcribe]   # offline segmen
 The exe accepts the same flags (e.g. `ListeningApp.exe --list-devices`) and prints to the PowerShell
 window it was started from.
 
-### Headless with an AI agent (MCP)
+### AI agents (MCP)
 
-`--mcp` runs the app without the tray, as an [MCP](https://modelcontextprotocol.io) server on
-stdin/stdout. An AI client on this PC (Claude Code, Claude Desktop or any other MCP client) starts the
-process and controls it through these tools:
+An AI client on this PC (Claude Code, Claude Desktop or any other [MCP](https://modelcontextprotocol.io)
+client) controls the app through these tools:
 
 | Tool | What it does |
 |---|---|
@@ -160,26 +160,41 @@ process and controls it through these tools:
 | `sketch_text` | draw from typed text as if you had said it, one line per sentence; returns the diagrams and their HTML files |
 | `get_sketch` | whether live sketch is on, its diagrams and their files |
 
-Register it in Claude Code:
+#### Through the running tray app (recommended)
+
+The tray app serves the tools at `http://127.0.0.1:8742/mcp` while it runs (`mcp.enabled`, `mcp.port`).
+The agent and you share one app: the same recording, the same live sketch window and the same hotkeys.
+Only programs on this PC can connect. Register it in Claude Code:
+
+```powershell
+claude mcp add --transport http listening-app http://127.0.0.1:8742/mcp
+```
+
+Or in a client that takes an `mcpServers` JSON config:
+
+```json
+{"mcpServers": {"listening-app": {"type": "http", "url": "http://127.0.0.1:8742/mcp"}}}
+```
+
+If the port is in use, the app says so at start and runs without the MCP server; choose another `mcp.port`.
+
+#### Headless, without the tray
+
+`--mcp` runs the app without the tray, as an MCP server on stdin/stdout that the AI client starts itself:
 
 ```powershell
 claude mcp add listening-app -- C:\Tools\ListeningApp\ListeningApp.exe --mcp
-```
-
-Or in any client that takes an `mcpServers` JSON config (Claude Desktop, a project `.mcp.json`):
-
-```json
-{"mcpServers": {"listening-app": {"command": "C:\\Tools\\ListeningApp\\ListeningApp.exe", "args": ["--mcp"]}}}
 ```
 
 From source, use `.venv\Scripts\python.exe` as the command with `-m listening_app --mcp` as the arguments.
 
 - It uses the same config file, transcripts folder and Hermes streaming as the tray app. Selections are
   saved to `config.yaml`. Pop-ups are not shown. Their messages appear in `get_status` instead.
+- It registers no global hotkeys.
 - When the AI client disconnects, a running recording is stopped and finalized. If the client kills the
   process instead, `finalize_unfinished_sessions` recovers the transcript on the next start.
-- Run either the tray app or the MCP server, not both. Each would record on its own and resend the same
-  queued Hermes portions.
+- Do not run it next to the tray app. Each would record on its own and resend the same queued Hermes
+  portions. Connect to the tray app's HTTP endpoint instead.
 
 ## Output files
 

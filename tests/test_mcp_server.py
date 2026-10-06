@@ -1,3 +1,5 @@
+import socket
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -7,11 +9,13 @@ import pytest
 from mcp import Client
 from mcp_types import CallToolResult, TextContent, Tool
 
-from listening_app import app, mcp_server
+from listening_app import app, main, mcp_server
 from listening_app.app import PRIVACY_REMINDER, AppController
 from listening_app.config import AppConfig, ConfigManager
 from listening_app.devices import AudioDevice
+from listening_app.hotkey import Hotkey
 from listening_app.logging_setup import RedactingFormatter
+from listening_app.mcp_http import LOCALHOST, McpHttpServer
 from listening_app.mcp_server import McpApp
 from listening_app.models import HermesStatus, SegmentStatus, Source, TranscriptSegment
 from listening_app.session import SessionError
@@ -95,6 +99,21 @@ class FakeSketch:
         return self.folder / f"{number:02d}-login.html"
 
 
+class FakeHotkey:
+    """Stands in for GlobalHotkey: records registrations instead of claiming the key in Windows."""
+
+    registered: list[Hotkey] = []
+
+    def __init__(self, hotkey: Hotkey, action: Callable[[], None]) -> None:
+        self.hotkey = hotkey
+
+    def start(self) -> None:
+        FakeHotkey.registered.append(self.hotkey)
+
+    def stop(self) -> None:
+        pass
+
+
 class FailingSession(FakeSession):
     def start(self) -> None:
         raise SessionError("No usable microphone or audio output found")
@@ -115,17 +134,22 @@ def transcripts(tmp_path: Path) -> Path:
     return tmp_path / "transcripts"
 
 
-@pytest.fixture
-def headless(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> McpApp:
+def make_controller(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, hotkeys: bool,
+                    extra_config: str = "") -> AppController:
     monkeypatch.setattr(app, "AudioSystem", FakeAudio)
     monkeypatch.setattr(app, "RecordingSession", FakeSession)
     monkeypatch.setattr(app, "LiveSketch", FakeSketch)
     monkeypatch.setattr(FakeSketch, "started", [])
     path = tmp_path / "config.yaml"
-    path.write_text(CONFIG.format(output=transcripts(tmp_path).as_posix()), encoding="utf-8")
+    path.write_text(CONFIG.format(output=transcripts(tmp_path).as_posix()) + extra_config, encoding="utf-8")
     configs = ConfigManager(path)
     configs.reload()
-    controller = AppController(configs, RedactingFormatter())
+    return AppController(configs, RedactingFormatter(), hotkeys=hotkeys)
+
+
+@pytest.fixture
+def headless(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> McpApp:
+    controller = make_controller(tmp_path, monkeypatch, hotkeys=False)
     frontend = McpApp(controller)
     controller.attach(frontend)
     return frontend
@@ -342,3 +366,52 @@ def test_live_sketch_in_the_wrong_state_is_refused(headless: McpApp) -> None:
     assert stop_while_off.is_error
     assert start_again.is_error
     assert "already on" in error_text(start_again)
+
+
+def test_the_tray_app_serves_the_tools_over_http(headless: McpApp) -> None:
+    async def status_over_http(url: str) -> CallToolResult:
+        async with Client(url) as client:
+            return await client.call_tool("get_status", {})
+
+    endpoint = McpHttpServer(headless.server, port=0)
+    endpoint.start()
+    try:
+        status = data(anyio.run(status_over_http, endpoint.url))
+    finally:
+        endpoint.stop()
+
+    assert endpoint.url.startswith(f"http://{LOCALHOST}:")
+    assert status["recording"] is False
+
+
+def test_a_taken_port_is_announced_and_the_tray_app_runs_without_mcp(tmp_path: Path,
+                                                                     monkeypatch: pytest.MonkeyPatch) -> None:
+    with socket.create_server((LOCALHOST, 0)) as taken:
+        port = taken.getsockname()[1]
+        controller = make_controller(tmp_path, monkeypatch, hotkeys=True, extra_config=f"mcp:\n  port: {port}\n")
+        notices: list[tuple[str, str]] = []
+
+        endpoint = main._serve_mcp(controller, notices)
+
+    assert endpoint is None
+    assert notices == [("MCP server not available", f"Port {port} is in use. Choose another mcp.port.")]
+
+
+def test_the_headless_mode_leaves_the_global_hotkeys_to_the_tray_app(headless: McpApp,
+                                                                     monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(app, "GlobalHotkey", FakeHotkey)
+    monkeypatch.setattr(FakeHotkey, "registered", [])
+
+    data(call(headless, "reload_config"))
+
+    assert FakeHotkey.registered == []
+
+
+def test_the_tray_app_registers_its_global_hotkeys(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(app, "GlobalHotkey", FakeHotkey)
+    monkeypatch.setattr(FakeHotkey, "registered", [])
+    controller = make_controller(tmp_path, monkeypatch, hotkeys=True)
+
+    controller.reload_config()
+
+    assert len(FakeHotkey.registered) == 2
