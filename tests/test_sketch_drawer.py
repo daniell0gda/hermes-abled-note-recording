@@ -1,3 +1,5 @@
+from collections.abc import Callable
+
 import pytest
 
 from listening_app.config import AppConfig, Language
@@ -61,7 +63,7 @@ def test_draw_prompt_shows_an_empty_diagram_and_the_kind_hint() -> None:
 
     prompt = fake.prompt()
     assert "Current diagram:\n(empty)" in prompt
-    assert "every edge is one message, listed in the order the messages happen" in prompt
+    assert "Every message is one edge from sender to receiver" in prompt
 
 
 def test_draw_prompt_includes_the_rolling_summary() -> None:
@@ -180,7 +182,52 @@ def test_retrospect_prompt_uses_the_full_transcript_and_asks_to_reconcile() -> N
     assert "New lines:" not in prompt
 
 
+def test_rebuild_prompt_draws_the_whole_clean_transcript_at_once() -> None:
+    drawer, fake = make_drawer(CURRENT)
+    clean = ["The planner drafts the plan.", "If the checker is not satisfied, work goes back to the implementor."]
+
+    answer = drawer.rebuild(DiagramKind.SWIMLANE, clean)
+
+    prompt = fake.prompt()
+    assert answer == CURRENT
+    assert "swimlane diagram of everything a speaker explained" in prompt
+    assert "Clean transcript, in the order things happen:\n" + "\n".join(clean) in prompt
+    assert "Lanes are the actors who do the work" in prompt
+    assert "Current diagram:" not in prompt
+
+
+@pytest.mark.parametrize("draw", [
+    lambda drawer: drawer.draw(request_path(), [SpokenLine("x")]),
+    lambda drawer: drawer.draw_routed(two_diagrams(), [], [SpokenLine("x")]),
+    lambda drawer: drawer.retrospect(request_path()),
+    lambda drawer: drawer.rebuild(DiagramKind.FLOW, ["x"]),
+])
+def test_every_drawing_prompt_says_labels_are_names_and_order_words_are_edges(draw: Callable[[Drawer], object]) -> None:
+    drawer, fake = make_drawer("diagram 1\n" + CURRENT)
+
+    draw(drawer)
+
+    assert "Labels are short names of one to four words, never sentences." in fake.prompt()
+    assert 'Order words ("then", "after that", "once that\'s done") are edges' in fake.prompt()
+
+
+def test_the_worked_example_is_only_shown_for_flow_rebuilds() -> None:
+    drawer, fake = make_drawer(CURRENT)
+
+    drawer.rebuild(DiagramKind.FLOW, ["x"])
+    assert "Example on another subject" in fake.prompt()
+
+    drawer.rebuild(DiagramKind.SEQUENCE, ["x"])
+    assert "Example on another subject" not in fake.prompt()
+    assert "Never make a node for a message or a step." in fake.prompt()
+
+
 def test_parse_revision_reads_optional_kind_line() -> None:
     body = 'title "Issue flow"\nuser "User"'
     assert parse_revision("kind swimlane\n" + body) == Revision(body, DiagramKind.SWIMLANE)
     assert parse_revision(body) == Revision(body)
+
+
+def test_parse_revision_reads_a_bare_type_line_as_the_kind() -> None:
+    body = 'title "Issue flow"\nuser "User"'
+    assert parse_revision("flow\n" + body) == Revision(body, DiagramKind.FLOW)

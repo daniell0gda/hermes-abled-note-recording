@@ -57,6 +57,7 @@ class FakeDrawer:
         self.clean = clean
         self.clean_calls: list[list[str]] = []
         self.drawn_on: list[str] = []
+        self.rebuilt: list[tuple[DiagramKind, list[str]]] = []
         self.on_clean: Any = None
 
     def clean_transcript(self, lines: list[str], summary: str = "") -> str:
@@ -69,6 +70,13 @@ class FakeDrawer:
 
     def draw(self, diagram: Diagram, lines: list[SpokenLine]) -> str:
         self.drawn_on.append(diagram.structure.to_text())
+        return self.next_answer()
+
+    def rebuild(self, kind: DiagramKind, clean: list[str]) -> str:
+        self.rebuilt.append((kind, list(clean)))
+        return self.next_answer()
+
+    def next_answer(self) -> str:
         return self.answers.pop(0) if len(self.answers) > 1 else self.answers[0]
 
     def draw_routed(self, diagrams: DiagramSet, previous: list[str], lines: list[SpokenLine]) -> RoutedDrawing:
@@ -122,15 +130,15 @@ def test_bullets_are_stripped_and_long_texts_fold_into_the_last_chunk() -> None:
 
 # --- rebuild ---
 
-def test_rebuild_starts_from_an_empty_diagram_and_ignores_the_messy_live_graph() -> None:
-    drawer = FakeDrawer(STEP_1, STEP_2, STEP_3, STEP_4)
+def test_rebuild_draws_all_clean_chunks_at_once_and_ignores_the_messy_live_graph() -> None:
+    drawer = FakeDrawer(STEP_4)
     judge = FakeJudge()
 
     result = rebuild_from_clean(messy_diagram(), drawer, judge, generation=1)
 
     assert result is not None
-    assert drawer.drawn_on[0] == ""
-    assert "team_box" not in drawer.drawn_on[1]
+    assert drawer.drawn_on == []
+    assert drawer.rebuilt == [(DiagramKind.SWIMLANE, chunk_clean_text(CLEAN))]
     assert result.kind is DiagramKind.SWIMLANE
     assert [node.id for node in result.structure.nodes] == [
         "create", "github", "start", "leader", "implementer", "checker", "done"]
@@ -142,12 +150,23 @@ def test_rebuild_starts_from_an_empty_diagram_and_ignores_the_messy_live_graph()
 
 def test_chunks_without_structure_are_not_drawn() -> None:
     judge = FakeJudge(routing(), routing(), routing(structural=0.1), routing(structural=0.1), routing())
-    drawer = FakeDrawer(STEP_1, STEP_2)
+    drawer = FakeDrawer(STEP_4)
 
     result = rebuild_from_clean(messy_diagram(), drawer, judge, generation=1)
 
     assert result is not None
     assert result.drawn_chunks == 2
+    assert drawer.rebuilt[0][1] == ["The create issue skill files an issue on GitHub.",
+                                    "The leader marks the issue done."]
+
+
+def test_a_rebuild_without_structural_chunks_fails_without_drawing() -> None:
+    drawer = FakeDrawer(STEP_4)
+
+    result = rebuild_from_clean(messy_diagram(), drawer, FakeJudge(chunk=routing(structural=0.1)), generation=1)
+
+    assert result is None
+    assert drawer.rebuilt == []
 
 
 def test_jev_failure_fails_the_rebuild_gracefully() -> None:
@@ -167,7 +186,7 @@ def test_a_stale_generation_stops_the_rebuild() -> None:
     result = rebuild_from_clean(messy_diagram(), drawer, FakeJudge(), generation=1, is_current=lambda gen: False)
 
     assert result is None
-    assert drawer.drawn_on == []
+    assert drawer.rebuilt == []
 
 
 # --- pipeline swap ---
@@ -195,7 +214,7 @@ def node_ids(recorder: Recorder) -> list[str]:
 
 def test_bucket_b_soft_swaps_the_live_view_without_losing_the_transcript() -> None:
     judge = FakeJudge(routing(kind=DiagramKind.FLOW, target=None), routing(kind=DiagramKind.FLOW))
-    drawer = FakeDrawer(LIVE, LIVE, STEP_1, STEP_2, STEP_3, STEP_4)
+    drawer = FakeDrawer(LIVE, LIVE, STEP_4)
     sketch, recorder = live_pipeline(judge, drawer)
     speak_two_lines(sketch)
     assert "team_box" in node_ids(recorder)
@@ -231,6 +250,27 @@ def test_an_outdated_bucket_b_result_is_not_swapped_in() -> None:
     assert sketch.run_bucket_b() is False
     assert len(recorder.states) == published
     assert "team_box" in node_ids(recorder)
+
+
+def test_a_rebuild_that_misses_a_newer_line_is_dropped_and_run_again() -> None:
+    judge = FakeJudge(routing(kind=DiagramKind.FLOW, target=None), routing(kind=DiagramKind.FLOW))
+    drawer = FakeDrawer(LIVE, LIVE, LIVE, STEP_4)
+    sketch, recorder = live_pipeline(judge, drawer)
+    speak_two_lines(sketch)
+
+    def speak_while_b_cleans() -> None:
+        drawer.on_clean = None
+        sketch.route(SpokenLine("and the leader closes it"))
+        sketch.draw_next()
+
+    drawer.on_clean = speak_while_b_cleans
+
+    assert sketch.run_bucket_b() is False
+    assert "team_box" in node_ids(recorder)
+
+    assert sketch.run_bucket_b() is True
+    assert "done" in node_ids(recorder)
+    assert drawer.clean_calls[-1][-1] == "and the leader closes it"
 
 
 def test_without_jev_bucket_b_is_disabled_and_the_live_view_stays() -> None:

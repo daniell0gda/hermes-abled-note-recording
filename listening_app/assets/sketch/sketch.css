@@ -122,4 +122,6 @@ body { background: var(--paper); color: var(--ink); font-family: var(--sans); }
 .sk-zone { fill: var(--zone); stroke: var(--zone-stroke); stroke-width: 0.8; }
 .sk-zone-label-bg { fill: var(--paper); }
 .sk-zone-label { font: 500 7px var(--mono); letter-spacing: 0.14em; fill: var(--zone-label); }
+.sk-lane-rule { stroke: var(--zone-stroke); stroke-width: 1; }
+.sk-lane-label { font: 500 9px var(--mono); letter-spacing: 0.16em; fill: var(--zone-label); }
 .sk-lifeline { stroke: var(--lifeline); stroke-width: 1; stroke-dasharray: 3 3; }

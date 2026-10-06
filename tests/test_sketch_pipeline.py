@@ -52,6 +52,7 @@ class FakeDrawer:
     def __init__(self, *answers: str) -> None:
         self.answers = list(answers)
         self.draw_calls: list[tuple[int, list[SpokenLine]]] = []
+        self.drawn_transcripts: list[list[str]] = []
         self.routed_calls: list[list[SpokenLine]] = []
         self.routed_answer = RoutedDrawing(Destination.new(DiagramKind.FLOW), FLOW)
         self.summaries: list[list[str]] = []
@@ -62,6 +63,7 @@ class FakeDrawer:
 
     def draw(self, diagram: Diagram, lines: list[SpokenLine]) -> str:
         self.draw_calls.append((diagram.number, lines))
+        self.drawn_transcripts.append(list(diagram.transcript))
         self.entered.set()
         if self.gate is not None:
             self.gate.wait(5)
@@ -141,6 +143,20 @@ def test_small_talk_is_not_drawn() -> None:
 
     assert not sketch.draw_next()
     assert drawer.draw_calls == []
+
+
+def test_a_line_without_structure_stays_in_the_transcript_as_context_for_the_next_draw() -> None:
+    drawer = FakeDrawer(FLOW)
+    sketch, _ = pipeline(FakeJudge(FIRST, CHATTER, STRUCTURAL), drawer)
+    sketch.route(segment("Auth caches tokens in Redis."))
+    sketch.draw_next()
+
+    sketch.route(segment("When the work is good"))
+    sketch.route(segment("the issue is done."))
+    sketch.draw_next()
+
+    assert drawer.drawn_transcripts[-1] == ["Auth caches tokens in Redis.", "When the work is good"]
+    assert [line.text for line in drawer.draw_calls[-1][1]] == ["the issue is done."]
 
 
 def test_previous_segments_and_the_overview_go_to_routing() -> None:

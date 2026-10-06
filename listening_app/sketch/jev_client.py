@@ -26,12 +26,14 @@ FOCAL_PROBABILITY = 0.7
 NEW_TARGET = "new"
 
 KINDS = {
-    DiagramKind.FLOW: "How components or steps connect: system architecture, data flow, pipelines, processes",
+    DiagramKind.FLOW: "How components, systems or steps connect: system architecture, data flow, pipelines, or a "
+                      "process where it does not matter who does each step",
     DiagramKind.SEQUENCE: "The back-and-forth order of messages between a few participants, e.g. a protocol or handshake",
     DiagramKind.STATE: "The lifecycle or statuses of one thing and the transitions between them",
     DiagramKind.TREE: "Hierarchy, parent and child decomposition",
     DiagramKind.ER: "Entities and their relationships",
-    DiagramKind.SWIMLANE: "Handoffs between roles or teams drawn as lanes (groups), top-to-bottom",
+    DiagramKind.SWIMLANE: "A process where several named people, roles, teams or tools each do their own steps and "
+                          "hand the work to each other, so who does each step matters",
     DiagramKind.NESTED: "Scope and containment: outer groups hold inner members",
     DiagramKind.LAYERS: "Stacked concerns from top to bottom (user, process, team, QA, done)",
     DiagramKind.DEPENDENCY: "Unordered dependencies or ownership between components",

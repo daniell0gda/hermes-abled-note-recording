@@ -10,6 +10,7 @@ _GROUP_LINE = re.compile(rf"^group\s+({_ID})(?:\s+{_LABEL})?\s*:\s*({_ID}(?:\s*,
 _EDGE_LINE = re.compile(rf"^({_ID})\s*->\s*({_ID})(?:\s+{_LABEL})?$")
 _NODE_LINE = re.compile(rf"^({_ID})\s+{_LABEL}$")
 _FENCE = "```"
+MAX_STRAY_SHARE = 0.2
 
 
 class StructureError(ValueError):
@@ -91,7 +92,7 @@ class _Builder:
         nodes = tuple(Node(node_id, label) for node_id, label in self.labels.items())
         used = set(self.labels)
         fixed_groups: list[Group] = []
-        for group_id, label, members in self.groups:
+        for group_id, label, members in _merged_groups(self.groups):
             gid = group_id
             if gid in used:
                 gid = f"{group_id}_group"
@@ -102,6 +103,17 @@ class _Builder:
             if kept:
                 fixed_groups.append(Group(gid, label, kept))
         return Structure(self.title, nodes, _numbered_edges(self.edges), tuple(fixed_groups))
+
+
+def _merged_groups(groups: list[tuple[str, str, list[str]]]) -> list[tuple[str, str, list[str]]]:
+    """Group lines with the same id or label are one group; members keep their first-seen order."""
+    merged: dict[str, tuple[str, str, list[str]]] = {}
+    for group_id, label, members in groups:
+        key = next((known for known, (other_id, other_label, _) in merged.items()
+                    if other_id == group_id or other_label.casefold() == label.casefold()), group_id)
+        target = merged.setdefault(key, (group_id, label, []))
+        target[2].extend(member for member in members if member not in target[2])
+    return list(merged.values())
 
 
 def _label_from_id(node_id: str) -> str:
@@ -120,17 +132,23 @@ def _numbered_edges(edges: list[tuple[str, str, str]]) -> tuple[Edge, ...]:
 
 
 def parse_structure(text: str) -> Structure:
-    """Parse the drawing model's answer. Raises StructureError on any line outside the format or on empty text."""
+    """Parse the drawing model's answer, skipping a few stray lines.
+
+    Raises StructureError on empty text, or when more than MAX_STRAY_SHARE of the lines are outside the format.
+    """
     builder = _Builder()
     content_lines = 0
+    stray: list[str] = []
     for number, raw in enumerate(text.splitlines(), start=1):
         line = raw.strip()
         if not line or line.startswith(_FENCE):
             continue
-        if not builder.add(line):
-            raise StructureError(f"line {number}: {line}")
         content_lines += 1
+        if not builder.add(line):
+            stray.append(f"line {number}: {line}")
     if not content_lines:
         raise StructureError("the answer is empty")
+    if len(stray) > MAX_STRAY_SHARE * content_lines:
+        raise StructureError(stray[0])
     return builder.build()
 

@@ -14,7 +14,16 @@ from dataclasses import dataclass, replace
 from typing import Any, Protocol
 
 from listening_app.sketch.bucket_b import BucketBResult, rebuild_from_clean
-from listening_app.sketch.diagrams import Changes, Destination, Diagram, DiagramSet, EdgeStyle, NodeStyle, Overview
+from listening_app.sketch.diagrams import (
+    Changes,
+    Destination,
+    Diagram,
+    DiagramKind,
+    DiagramSet,
+    EdgeStyle,
+    NodeStyle,
+    Overview,
+)
 from listening_app.sketch.drawer import Revision, RoutedDrawing, SpokenLine
 from listening_app.sketch.jev_client import JevError, Routing
 from listening_app.sketch.structure import Structure, StructureError, parse_structure
@@ -51,6 +60,8 @@ class Artist(Protocol):
     def retrospect(self, diagram: Diagram) -> Revision: ...
 
     def clean_transcript(self, lines: list[str], summary: str = "") -> str: ...
+
+    def rebuild(self, kind: DiagramKind, clean: list[str]) -> str: ...
 
 
 @dataclass(frozen=True)
@@ -178,6 +189,7 @@ class SketchPipeline:
         log.debug("Live sketch routed %r to %s", line.text, destination)
         if destination is None:
             self._switch(routing.switches_to(overview.active) if routing is not None else None)
+            self._keep_as_context(line.text)
             return
         with self._changed:
             switched = self._enqueue(line, destination, previous)
@@ -294,7 +306,10 @@ class SketchPipeline:
         return self._swap_bucket_b(result, len(source.transcript))
 
     def _swap_bucket_b(self, result: BucketBResult, lines_used: int) -> bool:
-        """Soft-swap: replace the live diagram's structure, kind and styles; keep its transcript and selection."""
+        """Soft-swap: replace the live diagram's structure, kind and styles; keep its transcript and selection.
+
+        A rebuild that misses lines the live view already shows is dropped and run again on the whole transcript.
+        """
         with self._changed:
             if result.generation != self._b_generation or self._b_stopped:
                 log.info("BucketB drop diagram %d gen=%d: outdated", result.diagram_number, result.generation)
@@ -302,14 +317,17 @@ class SketchPipeline:
             live = self._diagrams.get(result.diagram_number)
             if live is None:
                 return False
+            if len(live.transcript) > lines_used:
+                self._request_bucket_b(live.number)
+                log.info("BucketB drop diagram %d gen=%d: %d newer lines, rebuilding again",
+                         result.diagram_number, result.generation, len(live.transcript) - lines_used)
+                return False
             before_nodes, before_edges = len(live.structure.nodes), len(live.structure.edges)
             live.set_kind(result.kind)
             live.update(result.structure)
             live.set_styles(result.node_styles, result.edge_styles)
             self._b_swaps += 1
             self._b_lines_done[live.number] = max(self._b_lines_done.get(live.number, 0), lines_used)
-            if len(live.transcript) - lines_used >= self._b_min_new_lines:
-                self._request_bucket_b(live.number)
             state = self._state(live.number)
         log.info("BucketB swap diagram %d gen=%d (%d->%d nodes, %d->%d edges, kind=%s)",
                  result.diagram_number, result.generation, before_nodes, len(result.structure.nodes),
@@ -377,6 +395,14 @@ class SketchPipeline:
             return None
         log.debug("Jev routing: %s", routing)
         return routing
+
+    def _keep_as_context(self, text: str) -> None:
+        """A line without structure joins the current diagram's transcript, so later draws and rebuilds read it."""
+        with self._changed:
+            active = self._diagrams.active
+            if active is not None:
+                active.transcript.append(text)
+                self._note_bucket_b(active)
 
     def _switch(self, number: int | None) -> None:
         if number is None:

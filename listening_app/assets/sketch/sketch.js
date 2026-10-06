@@ -22,6 +22,11 @@
   const EYEBROWS = { database: "DATABASE", queue: "QUEUE", cache: "CACHE", external: "EXTERNAL", client: "CLIENT", actor: "ACTOR" };
   const BASE_HEIGHT = { database: 56, decision: 56, actor: 48 };
   const RANK_DIRECTION = { tree: "TB", nested: "TB", layers: "TB", swimlane: "TB", state: "TB" };
+  const LANE_KINDS = new Set(["swimlane", "layers"]);
+  const LANE_PAD = 20;
+  const COLUMN_GAP = 64;
+  const STACK_GAP = 16;
+  const BEND_OFFSET = 8;
 
   function snap(value) {
     return Math.ceil(value / GRID) * GRID;
@@ -43,7 +48,7 @@
       if (line && (line + " " + word).length > WRAP_CHARS) lines.push(word);
       else lines[lines.length - 1] = line ? line + " " + word : word;
     }
-    if (lines.length > 2) lines.splice(2, lines.length, lines.slice(1).join(" ").slice(0, WRAP_CHARS - 1) + "…");
+    if (lines.length > 2) lines.splice(1, lines.length, lines.slice(1).join(" ").slice(0, WRAP_CHARS - 1) + "…");
     return lines;
   }
 
@@ -179,12 +184,25 @@
     return `M${x - 12},${top} C${x - 12},${top - 32} ${x + 12},${top - 32} ${x + 12},${top}`;
   }
 
-  function drawEdge(layer, edge, d) {
+  function drawEdge(layer, edge, d, labelAt) {
     const group = create("g", { class: "sk-edge", "data-id": edge.id, "data-style": edge.style }, layer);
     create("path", { class: "sk-hit", d }, group);
     const line = create("path", { class: "sk-line", d, "marker-end": `url(#${MARKER_BY_STYLE[edge.style] || "sk-arrow"})` }, group);
-    if (edge.label) drawEdgeLabel(group, edge.label, line.getPointAtLength(line.getTotalLength() / 2));
+    if (edge.label) drawEdgeLabel(group, edge.label, labelAt || line.getPointAtLength(line.getTotalLength() / 2));
     return group;
+  }
+
+  function labelSpot(points, label, obstacles) {
+    const width = snap(textWidth(label, EDGE_LABEL_PX, MONO_EM) + 8), height = 12;
+    const clear = (at) => obstacles.every((box) =>
+      Math.abs(at.x - box.x) >= (width + box.width) / 2 + 2 || Math.abs(at.y - box.y) >= (height + box.height) / 2 + 2);
+    const segments = points.slice(1).map((end, i) => ({ start: points[i], end, length: distance(points[i], end) }))
+      .sort((a, b) => b.length - a.length);
+    const candidates = segments.flatMap(({ start, end }) => [0.5, 0.25, 0.75, 0.375, 0.625]
+      .map((share) => ({ x: start.x + (end.x - start.x) * share, y: start.y + (end.y - start.y) * share })));
+    const at = candidates.find(clear) || candidates[0];
+    obstacles.push({ x: at.x, y: at.y, width, height });
+    return at;
   }
 
   function drawEdgeLabel(group, label, at) {
@@ -254,6 +272,111 @@
     return { boxes, zones, routes, width: graph.graph().width, height: graph.graph().height };
   }
 
+  function flowColumns(diagram, boxes) {
+    const graph = new dagre.graphlib.Graph({ multigraph: true });
+    graph.setGraph({ rankdir: "LR", nodesep: 8, ranksep: 8 });
+    graph.setDefaultEdgeLabel(() => ({}));
+    for (const [id, box] of boxes) graph.setNode(id, { width: box.width, height: box.height });
+    for (const edge of diagram.edges) if (edge.source !== edge.target) graph.setEdge(edge.source, edge.target, {}, edge.id);
+    dagre.layout(graph);
+    const rankX = (id) => Math.round(graph.node(id).x);
+    const columns = [...new Set([...boxes.keys()].map(rankX))].sort((a, b) => a - b);
+    return new Map([...boxes.keys()].map((id) => [id, columns.indexOf(rankX(id))]));
+  }
+
+  function lanesOf(diagram, boxes) {
+    const lanes = diagram.groups.map((group) => ({ label: group.label.toUpperCase(), members: [] }));
+    const placed = new Set();
+    diagram.groups.forEach((group, index) => {
+      for (const member of group.members) {
+        if (boxes.has(member) && !placed.has(member)) {
+          lanes[index].members.push(member);
+          placed.add(member);
+        }
+      }
+    });
+    lanes.push({ label: "", members: [...boxes.keys()].filter((id) => !placed.has(id)) });
+    return lanes.filter((lane) => lane.members.length);
+  }
+
+  function placeLane(lane, column, boxes, centers, top) {
+    const stacks = new Map();
+    for (const id of lane.members) stacks.set(column.get(id), [...(stacks.get(column.get(id)) || []), id]);
+    const rowHeight = Math.max(...lane.members.map((id) => boxes.get(id).height)) + STACK_GAP;
+    for (const [index, ids] of stacks) {
+      ids.forEach((id, slot) => Object.assign(boxes.get(id), { x: centers[index], y: top + LANE_PAD + slot * rowHeight + (rowHeight - STACK_GAP) / 2 }));
+    }
+    const rows = Math.max(...[...stacks.values()].map((ids) => ids.length));
+    return rows * rowHeight - STACK_GAP + 2 * LANE_PAD;
+  }
+
+  function laneRoute(a, b) {
+    if (Math.abs(a.y - b.y) < 1 && b.x < a.x) {
+      const below = Math.max(a.y + a.height / 2, b.y + b.height / 2) + 12;
+      return [{ x: a.x, y: a.y + a.height / 2 }, { x: a.x, y: below }, { x: b.x, y: below }, { x: b.x, y: b.y + b.height / 2 }];
+    }
+    const { horizontal, start, end } = ports(a, b, false);
+    if (!horizontal || Math.abs(start.y - end.y) < 1) return elbow(start, end, horizontal);
+    const bend = start.x + Math.sign(end.x - start.x) * (COLUMN_GAP / 2 - BEND_OFFSET);
+    return [start, { x: bend, y: start.y }, { x: bend, y: end.y }, end];
+  }
+
+  function layoutLanes(diagram) {
+    const boxes = new Map(diagram.nodes.map((node) => [node.id, measureNode(node)]));
+    const lanes = lanesOf(diagram, boxes);
+    const column = flowColumns(diagram, boxes);
+    const widths = [];
+    for (const [id, box] of boxes) widths[column.get(id)] = Math.max(widths[column.get(id)] || 0, box.width);
+    const labelWidth = snap(Math.max(96, ...lanes.map((lane) => textWidth(lane.label, 9, MONO_EM * 1.25))) + 32);
+    const centers = [];
+    let x = MARGIN + labelWidth;
+    for (const width of widths) {
+      centers.push(x + width / 2);
+      x += width + COLUMN_GAP;
+    }
+    const bands = [];
+    let top = MARGIN;
+    for (const lane of lanes) {
+      const height = placeLane(lane, column, boxes, centers, top);
+      bands.push({ label: lane.label, top, height });
+      top += height;
+    }
+    const routes = new Map();
+    const obstacles = [...boxes.values()];
+    for (const edge of diagram.edges) {
+      const a = boxes.get(edge.source), b = boxes.get(edge.target);
+      if (edge.source === edge.target) {
+        routes.set(edge.id, { d: selfLoop(a) });
+        continue;
+      }
+      const points = laneRoute(a, b);
+      routes.set(edge.id, { d: roundedPath(points), labelAt: edge.label ? labelSpot(points, edge.label, obstacles) : null });
+    }
+    return { boxes, bands, routes, labelWidth, width: x - COLUMN_GAP + MARGIN, height: top + MARGIN };
+  }
+
+  function renderLanes(svg, diagram) {
+    const layout = layoutLanes(diagram);
+    const laneLayer = create("g", { class: "sk-lanes" }, svg);
+    const left = MARGIN / 2, right = layout.width - MARGIN / 2;
+    for (const band of layout.bands) {
+      create("line", { class: "sk-lane-rule", x1: left, y1: band.top, x2: right, y2: band.top }, laneLayer);
+      create("text", { class: "sk-lane-label", x: left + 8, y: band.top + band.height / 2 + 3 }, laneLayer, band.label);
+    }
+    const bottom = layout.height - MARGIN;
+    create("line", { class: "sk-lane-rule", x1: left, y1: bottom, x2: right, y2: bottom }, laneLayer);
+    const divider = MARGIN + layout.labelWidth - COLUMN_GAP / 2;
+    create("line", { class: "sk-lane-rule", x1: divider, y1: MARGIN, x2: divider, y2: bottom }, laneLayer);
+    const edgeLayer = create("g", { class: "sk-edges" }, svg);
+    const nodeLayer = create("g", { class: "sk-nodes" }, svg);
+    for (const edge of diagram.edges) {
+      const route = layout.routes.get(edge.id);
+      drawEdge(edgeLayer, edge, route.d, route.labelAt);
+    }
+    for (const node of diagram.nodes) drawNode(nodeLayer, node, layout.boxes.get(node.id));
+    return { width: layout.width, height: layout.height };
+  }
+
   function renderGraph(svg, diagram) {
     const layout = layoutGraph(diagram);
     const zoneLayer = create("g", { class: "sk-zones" }, svg);
@@ -310,6 +433,7 @@
     let size;
     if (!diagram.nodes.length) size = renderEmpty(svg);
     else if (diagram.kind === "sequence") size = renderSequence(svg, diagram);
+    else if (LANE_KINDS.has(diagram.kind) && diagram.groups.length) size = renderLanes(svg, diagram);
     else size = renderGraph(svg, diagram);
     svg.setAttribute("viewBox", `0 0 ${Math.ceil(size.width)} ${Math.ceil(size.height)}`);
     svg.setAttribute("preserveAspectRatio", "xMidYMin meet");

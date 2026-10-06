@@ -90,6 +90,19 @@ def test_the_error_names_the_offending_line() -> None:
         parse_structure('a "A"\noops')
 
 
+def test_a_stray_line_in_a_long_answer_is_skipped() -> None:
+    structure = parse_structure('a "A"\nb "B"\nc "C"\na -> b\nb -> c "next" when the loop ends\nc -> a')
+
+    assert [edge.id for edge in structure.edges] == ["a->b", "c->a"]
+
+
+def test_group_lines_with_the_same_label_or_id_are_one_group() -> None:
+    structure = parse_structure('a "A"\nb "B"\nc "C"\ngroup lead_a "Team leader": a\ngroup lead_b "team leader": b\n'
+                                'group lead_a: c, a')
+
+    assert structure.groups == (Group("lead_a", "Team leader", ("a", "b", "c")),)
+
+
 def test_text_form_round_trips() -> None:
     structure = parse_structure(DIAGRAM)
 
