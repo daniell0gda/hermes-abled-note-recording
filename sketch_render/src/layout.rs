@@ -68,11 +68,11 @@ impl Layered {
         vertex.sv * (k + 1) as f64 / (n + 1) as f64 - vertex.sv / 2.0
     }
 
-    pub fn from_port(&self, hop: &Hop) -> f64 {
+    pub fn start_port(&self, hop: &Hop) -> f64 {
         self.vertices[hop.from].v + self.port_offset(hop.from, hop.from_slot)
     }
 
-    pub fn to_port(&self, hop: &Hop) -> f64 {
+    pub fn end_port(&self, hop: &Hop) -> f64 {
         self.vertices[hop.to].v + self.port_offset(hop.to, hop.to_slot)
     }
 }
@@ -583,7 +583,7 @@ fn straighten_long_edges(layered: &mut Layered, node_gap: f64) {
         if low > high {
             continue;
         }
-        let ends = [layered.to_port(&layered.hops[last]), layered.from_port(&layered.hops[first])];
+        let ends = [layered.end_port(&layered.hops[last]), layered.start_port(&layered.hops[first])];
         let v = ends.into_iter().find(|v| (low..=high).contains(v)).unwrap_or_else(|| {
             let mean = dummies.iter().map(|&dummy| layered.vertices[dummy].v).sum::<f64>() / dummies.len() as f64;
             mean.clamp(low, high)

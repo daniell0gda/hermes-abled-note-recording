@@ -195,8 +195,8 @@ impl Geometry<'_> {
 }
 
 fn ports(layered: &Layered) -> (Vec<f64>, Vec<f64>) {
-    let mut from_v: Vec<f64> = layered.hops.iter().map(|hop| layered.from_port(hop)).collect();
-    let mut to_v: Vec<f64> = layered.hops.iter().map(|hop| layered.to_port(hop)).collect();
+    let mut from_v: Vec<f64> = layered.hops.iter().map(|hop| layered.start_port(hop)).collect();
+    let mut to_v: Vec<f64> = layered.hops.iter().map(|hop| layered.end_port(hop)).collect();
     for (index, hop) in layered.hops.iter().enumerate() {
         let jog = (to_v[index] - from_v[index]).abs();
         if jog == 0.0 || jog > JOG_LIMIT {
@@ -327,9 +327,8 @@ fn track_order(members: &[usize], bending: &[usize], from_v: &[f64], to_v: &[f64
             }
         }
     }
-    for hop in 0..members.len() {
-        let contradicted: Vec<usize> = should[hop].iter().copied().filter(|&p| must[p].contains(&hop)).collect();
-        should[hop].retain(|p| !contradicted.contains(p));
+    for (hop, earlier) in should.iter_mut().enumerate() {
+        earlier.retain(|&p| !must[p].contains(&hop));
     }
     TrackOrder { must, should }
 }
