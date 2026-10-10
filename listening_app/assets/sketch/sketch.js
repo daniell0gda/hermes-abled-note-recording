@@ -30,6 +30,16 @@
   const COLUMN_GAP = 64;
   const STACK_GAP = 16;
   const BEND_OFFSET = 8;
+  const SHAPE_NAMES = { service: "Service", database: "Database", queue: "Queue", cache: "Cache", actor: "Actor", external: "External", client: "Client", state: "State", decision: "Decision", note: "Note" };
+  const EDGE_NAMES = { sync: "Sync call", async: "Async event", data: "Data access", transition: "Transition", dependency: "Dependency" };
+  const SWATCH_WIDTH = 28;
+  const SWATCH_HEIGHT = 14;
+  const SWATCH_GAP = 6;
+  const LEGEND_LABEL_PX = 10;
+  const LEGEND_ROW = 22;
+  const LEGEND_GAP = 24;
+  const LEGEND_ITEM_GAP = 24;
+  const LEGEND_MIN_WIDTH = 480;
 
   function snap(value) {
     return Math.ceil(value / GRID) * GRID;
@@ -116,6 +126,7 @@
     const defs = create("defs", {}, svg);
     const markers = [
       ["sk-arrow", "path", { class: "sk-marker-fill", d: "M0,0 L8,3 L0,6 Z" }],
+      ["sk-arrow-link", "path", { class: "sk-marker-link", d: "M0,0 L8,3 L0,6 Z" }],
       ["sk-arrow-ink", "path", { class: "sk-marker-ink", d: "M0,0 L8,3 L0,6 Z" }],
       ["sk-arrow-open", "polyline", { class: "sk-marker-open", points: "0 0, 8 3, 0 6" }],
       ["sk-arrow-soft", "polyline", { class: "sk-marker-soft", points: "0 0, 8 3, 0 6" }],
@@ -126,7 +137,7 @@
     }
   }
 
-  const MARKER_BY_STYLE = { async: "sk-arrow-open", dependency: "sk-arrow-soft", transition: "sk-arrow-ink" };
+  const MARKER_BY_STYLE = { sync: "sk-arrow-link", async: "sk-arrow-open", dependency: "sk-arrow-soft", transition: "sk-arrow-ink" };
 
   function roundedPath(points) {
     let d = `M${points[0].x},${points[0].y}`;
@@ -420,6 +431,47 @@
     return { width: MARGIN * 2 + spacing * boxes.length, height: bottom + MARGIN };
   }
 
+  function legendEntries(diagram) {
+    const shapes = [...new Set(diagram.nodes.map((node) => node.shape))].map((shape) => ({ label: SHAPE_NAMES[shape], shape }));
+    const focal = diagram.nodes.some((node) => node.focal) ? [{ label: "Focus", shape: "service", focal: true }] : [];
+    const styles = [...new Set(diagram.edges.map((edge) => edge.style))].map((style) => ({ label: EDGE_NAMES[style], style }));
+    return [...shapes, ...focal, ...styles];
+  }
+
+  function drawSwatch(layer, entry, x, y) {
+    if (entry.style) {
+      const group = create("g", { class: "sk-edge", "data-style": entry.style }, layer);
+      create("path", { class: "sk-line", d: `M${x},${y} H${x + SWATCH_WIDTH}`, "marker-end": `url(#${MARKER_BY_STYLE[entry.style] || "sk-arrow"})` }, group);
+      return;
+    }
+    const group = create("g", { class: "sk-node" + (entry.focal ? " is-focal" : ""), "data-shape": entry.shape, transform: `translate(${x + SWATCH_WIDTH / 2},${y})` }, layer);
+    drawShape(group, entry.shape, SWATCH_WIDTH, SWATCH_HEIGHT);
+  }
+
+  function renderLegend(svg, diagram, size) {
+    const entries = legendEntries(diagram);
+    if (!entries.length) return size;
+    const layer = create("g", { class: "sk-legend" }, svg);
+    const width = Math.max(size.width, LEGEND_MIN_WIDTH), right = width - MARGIN;
+    const rule = size.height + LEGEND_GAP / 2;
+    create("line", { class: "sk-legend-rule", x1: MARGIN / 2, y1: rule, x2: width - MARGIN / 2, y2: rule }, layer);
+    let row = rule + LEGEND_ROW / 2;
+    create("text", { class: "sk-legend-title", x: MARGIN, y: row + 3 }, layer, "LEGEND");
+    row += LEGEND_ROW;
+    let x = MARGIN;
+    for (const entry of entries) {
+      const itemWidth = SWATCH_WIDTH + SWATCH_GAP + textWidth(entry.label, LEGEND_LABEL_PX, SANS_EM);
+      if (x + itemWidth > right) {
+        x = MARGIN;
+        row += LEGEND_ROW;
+      }
+      drawSwatch(layer, entry, x, row);
+      create("text", { class: "sk-legend-label", x: x + SWATCH_WIDTH + SWATCH_GAP, y: row + 4 }, layer, entry.label);
+      x += itemWidth + LEGEND_ITEM_GAP;
+    }
+    return { width, height: row + LEGEND_ROW / 2 + MARGIN / 2 };
+  }
+
   function renderEmpty(svg) {
     create("text", { class: "sk-empty", x: 240, y: 135, "text-anchor": "middle" }, svg, "Start explaining — the diagram appears here.");
     return { width: 480, height: 270 };
@@ -438,6 +490,7 @@
     else if (diagram.kind === "sequence") size = renderSequence(svg, diagram);
     else if (LANE_KINDS.has(diagram.kind) && diagram.groups.length) size = renderLanes(svg, diagram);
     else size = renderGraph(svg, diagram);
+    size = renderLegend(svg, diagram, size);
     fit(svg, size);
     mark(svg, diagram.selected || [], diagram.pointed || null);
     return performance.now() - started;

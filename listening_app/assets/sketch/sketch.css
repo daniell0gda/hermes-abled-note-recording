@@ -12,7 +12,7 @@
   --store: rgba(45, 49, 66, 0.05);
   --external: rgba(45, 49, 66, 0.03);
   --external-stroke: rgba(45, 49, 66, 0.30);
-  --input: rgba(79, 93, 117, 0.10);
+  --actor: rgba(46, 90, 168, 0.10);
   --zone: rgba(45, 49, 66, 0.02);
   --zone-stroke: rgba(45, 49, 66, 0.10);
   --zone-label: rgba(45, 49, 66, 0.40);
@@ -39,7 +39,7 @@
     --store: rgba(245, 245, 245, 0.05);
     --external: rgba(245, 245, 245, 0.03);
     --external-stroke: rgba(245, 245, 245, 0.30);
-    --input: rgba(191, 192, 192, 0.10);
+    --actor: rgba(106, 149, 216, 0.16);
     --zone: rgba(245, 245, 245, 0.02);
     --zone-stroke: rgba(245, 245, 245, 0.10);
     --zone-label: rgba(245, 245, 245, 0.40);
@@ -63,7 +63,7 @@
   --store: rgba(245, 245, 245, 0.05);
   --external: rgba(245, 245, 245, 0.03);
   --external-stroke: rgba(245, 245, 245, 0.30);
-  --input: rgba(191, 192, 192, 0.10);
+  --actor: rgba(106, 149, 216, 0.16);
   --zone: rgba(245, 245, 245, 0.02);
   --zone-stroke: rgba(245, 245, 245, 0.10);
   --zone-label: rgba(245, 245, 245, 0.40);
@@ -93,7 +93,7 @@ body { background: var(--paper); color: var(--ink); font-family: var(--sans); }
 .sk-node[data-shape="cache"] .sk-shape { fill: var(--store); stroke: var(--muted); }
 .sk-node[data-shape="external"] .sk-shape { fill: var(--external); stroke: var(--external-stroke); stroke-dasharray: 4 3; }
 .sk-node[data-shape="actor"] .sk-shape,
-.sk-node[data-shape="client"] .sk-shape { fill: var(--input); stroke: var(--soft); }
+.sk-node[data-shape="client"] .sk-shape { fill: var(--actor); stroke: var(--link); }
 .sk-node[data-shape="note"] .sk-shape { fill: var(--paper-2); stroke: var(--soft); stroke-width: 0.8; }
 .sk-node[data-shape="note"] .sk-label { font: italic 400 14px var(--serif); }
 .sk-node.is-focal .sk-shape { fill: var(--accent-tint); stroke: var(--accent); stroke-width: 1.2; }
@@ -104,6 +104,7 @@ body { background: var(--paper); color: var(--ink); font-family: var(--sans); }
 .is-selected > .sk-outline { opacity: 1; }
 
 .sk-edge path.sk-line { fill: none; stroke: var(--muted); stroke-width: 1.2; }
+.sk-edge[data-style="sync"] path.sk-line { stroke: var(--link); }
 .sk-edge[data-style="async"] path.sk-line { stroke-dasharray: 4 3; stroke-width: 1; }
 .sk-edge[data-style="data"] path.sk-line { stroke-width: 1; }
 .sk-edge[data-style="transition"] path.sk-line { stroke: var(--ink); stroke-width: 1; }
@@ -115,6 +116,7 @@ body { background: var(--paper); color: var(--ink); font-family: var(--sans); }
 .sk-edge.is-selected path.sk-line { stroke: var(--link); stroke-width: 2; }
 
 .sk-marker-fill { fill: var(--muted); }
+.sk-marker-link { fill: var(--link); }
 .sk-marker-ink { fill: var(--ink); }
 .sk-marker-open { fill: none; stroke: var(--muted); stroke-width: 1.2; }
 .sk-marker-soft { fill: none; stroke: var(--soft); stroke-width: 1.2; }
@@ -125,3 +127,7 @@ body { background: var(--paper); color: var(--ink); font-family: var(--sans); }
 .sk-lane-rule { stroke: var(--zone-stroke); stroke-width: 1; }
 .sk-lane-label { font: 500 9px var(--mono); letter-spacing: 0.16em; fill: var(--zone-label); }
 .sk-lifeline { stroke: var(--lifeline); stroke-width: 1; stroke-dasharray: 3 3; }
+
+.sk-legend-rule { stroke: var(--rule); stroke-width: 1; }
+.sk-legend-title { font: 500 8px var(--mono); letter-spacing: 0.18em; fill: var(--soft); }
+.sk-legend-label { font: 400 10px var(--sans); fill: var(--muted); }
