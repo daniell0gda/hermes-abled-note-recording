@@ -1,12 +1,18 @@
 /**
  * Live sketch window: tabs per diagram, rendering, and the pointer / click / tab / mic / copy events sent back to Python
  * through `window.pywebview.api.event`. Python calls `SketchApp.receive(message)`.
+ * Ctrl + mouse wheel zooms at the mouse, dragging moves the view, Ctrl+0 resets it; a new tab starts unzoomed.
  */
 (function (global) {
   "use strict";
 
   const POINTER_INTERVAL_MS = 100;
   const NOTICE_MS = 3000;
+  const BOXES_DELAY_MS = 150;
+  const MIN_ZOOM = 0.25;
+  const MAX_ZOOM = 8;
+  const ZOOM_PER_WHEEL_DELTA = 0.0015;
+  const DRAG_THRESHOLD_PX = 4;
   const svg = document.getElementById("sketch");
   const tabs = document.getElementById("tabs");
   const title = document.getElementById("title");
@@ -25,6 +31,10 @@
   let mouse = null;
   let ready = false;
   const outbox = [];
+  let camera = { scale: 1, x: 0, y: 0 };
+  let drag = null;
+  let dragged = false;
+  let boxesTimer = null;
 
   function send(event) {
     if (ready) global.pywebview.api.event(JSON.stringify(event));
@@ -63,11 +73,61 @@
     send({ type: "boxes", boxes: SketchRenderer.boxes(svg) });
   }
 
+  function sendBoxesSoon() {
+    clearTimeout(boxesTimer);
+    boxesTimer = setTimeout(sendBoxes, BOXES_DELAY_MS);
+  }
+
+  function applyCamera() {
+    svg.style.transform = `translate(${camera.x}px, ${camera.y}px) scale(${camera.scale})`;
+    sendBoxesSoon();
+  }
+
+  function resetCamera() {
+    camera = { scale: 1, x: 0, y: 0 };
+    applyCamera();
+  }
+
+  function zoomAt(clientX, clientY, factor) {
+    const rect = svg.getBoundingClientRect();
+    const scale = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, camera.scale * factor));
+    const ratio = scale / camera.scale;
+    camera = {
+      scale,
+      x: camera.x + (clientX - rect.left) * (1 - ratio),
+      y: camera.y + (clientY - rect.top) * (1 - ratio),
+    };
+    applyCamera();
+  }
+
+  function startDrag(event) {
+    if (event.button !== 0) return;
+    drag = { clientX: event.clientX, clientY: event.clientY, x: camera.x, y: camera.y };
+    dragged = false;
+  }
+
+  function moveDrag(event) {
+    if (!drag) return;
+    const dx = event.clientX - drag.clientX;
+    const dy = event.clientY - drag.clientY;
+    if (!dragged && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
+    dragged = true;
+    canvas.classList.add("is-dragging");
+    camera = { scale: camera.scale, x: drag.x + dx, y: drag.y + dy };
+    applyCamera();
+  }
+
+  function endDrag() {
+    drag = null;
+    canvas.classList.remove("is-dragging");
+  }
+
   function activate(number) {
     if (number === active) return;
     active = number;
     selection = new Set(current().selected);
     drawTabs();
+    resetCamera();
     draw();
     send({ type: "activate", number });
   }
@@ -92,6 +152,7 @@
       views = message.views;
       active = message.active;
       if (switched || message.updated === active) selection = new Set(current().selected);
+      if (switched) resetCamera();
       drawTabs();
       if (switched || message.updated === active || message.updated === null) draw();
     } else if (message.type === "point") {
@@ -109,6 +170,25 @@
     send({ type: "microphone" });
   });
   copyPath.addEventListener("click", () => send({ type: "copy-path", number: active }));
+
+  canvas.addEventListener("wheel", (event) => {
+    if (!event.ctrlKey) return;
+    event.preventDefault();
+    zoomAt(event.clientX, event.clientY, Math.exp(-event.deltaY * ZOOM_PER_WHEEL_DELTA));
+  }, { passive: false });
+  canvas.addEventListener("mousedown", startDrag);
+  global.addEventListener("mousemove", moveDrag);
+  global.addEventListener("mouseup", endDrag);
+  canvas.addEventListener("click", (event) => {
+    if (!dragged) return;
+    dragged = false;
+    event.stopPropagation();
+  }, true);
+  global.addEventListener("keydown", (event) => {
+    if (!(event.ctrlKey && event.key === "0")) return;
+    event.preventDefault();
+    resetCamera();
+  });
 
   svg.addEventListener("click", (event) => {
     if (!current().number) return;
@@ -135,11 +215,7 @@
     if (mouse) send({ type: "pointer", t: Date.now() / 1000, x: mouse.x, y: mouse.y });
   }, POINTER_INTERVAL_MS);
 
-  let resizeTimer = null;
-  global.addEventListener("resize", () => {
-    clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(sendBoxes, 150);
-  });
+  global.addEventListener("resize", sendBoxesSoon);
 
   global.addEventListener("pywebviewready", () => {
     ready = true;

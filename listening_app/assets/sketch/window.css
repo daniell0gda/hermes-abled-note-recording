@@ -13,6 +13,9 @@
 }
 .sk-notice.is-shown { opacity: 1; }
 .sk-canvas svg [data-id] { cursor: pointer; }
+.sk-canvas { overflow: hidden; cursor: grab; user-select: none; }
+.sk-canvas svg { transform-origin: 0 0; }
+.sk-canvas.is-dragging, .sk-canvas.is-dragging svg [data-id] { cursor: grabbing; }
 :root { --live: #d93025; }
 .sk-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
 .sk-tools { display: flex; gap: 8px; flex-shrink: 0; }

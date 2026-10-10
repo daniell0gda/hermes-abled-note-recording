@@ -120,6 +120,8 @@ states and how they connect. Switch it on with **Ctrl+Alt+D** (`sketch.hotkey`) 
 - **Pointing:** rest the mouse on an element for 2 s and it is lightly highlighted; "this one" or "here" in what
   you say then means that element. **Selecting:** click elements to select them (solid outline), click empty
   space to clear; the drawing model sees the selection.
+- **Zoom and move:** Ctrl + mouse wheel zooms in and out at the mouse; drag with the left button to move the view;
+  Ctrl+0 resets it. Each tab starts unzoomed. The view stays while the diagram updates.
 - **Mic on / off** in the window shows whether live sketch is listening (a blinking red dot) and toggles it. Off
   only stops live sketch hearing you; a running recording keeps recording.
 - Every diagram is saved, and rewritten on each update, as a self-contained HTML file:
