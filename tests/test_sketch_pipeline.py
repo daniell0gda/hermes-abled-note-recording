@@ -205,6 +205,52 @@ def test_the_new_diagram_button_opens_an_empty_flow_tab_and_makes_it_current() -
     assert latest_view(recorder, 2)["nodes"] == []
 
 
+def test_closing_a_diagram_publishes_the_others_and_drops_its_waiting_lines() -> None:
+    drawer = FakeDrawer(FLOW)
+    sketch, recorder = pipeline(FakeJudge(FIRST, NEW_REQUEST), drawer)
+    sketch.route(segment("Requests go to auth."))
+    sketch.draw_next()
+    sketch.route(segment("Let's start a new diagram for the order lifecycle."))
+
+    sketch.close(2)
+
+    assert [view["number"] for view in recorder.states[-1].views] == [1]
+    assert recorder.states[-1].active == 1
+    assert recorder.states[-1].updated is None
+    assert not sketch.draw_next()
+    assert [number for number, _ in drawer.draw_calls] == [1]
+
+
+def test_a_draw_in_flight_for_a_closed_diagram_is_dropped(caplog: pytest.LogCaptureFixture) -> None:
+    drawer = FakeDrawer(FLOW)
+    drawer.gate = threading.Event()
+    sketch, recorder = pipeline(FakeJudge(FIRST), drawer, retrospect_every_n=0)
+    sketch.start()
+    try:
+        sketch.add(segment("Requests go to auth."))
+        assert drawer.entered.wait(5)
+
+        sketch.close(1)
+        drawer.gate.set()
+
+        assert sketch.wait_until_idle(5)
+    finally:
+        sketch.stop()
+
+    assert recorder.states[-1].views == ()
+    assert recorder.states[-1].active is None
+    assert recorder.skipped == []
+    assert "step failed" not in caplog.text
+
+
+def test_closing_an_unknown_diagram_publishes_nothing() -> None:
+    sketch, recorder = pipeline(FakeJudge(FIRST), FakeDrawer(FLOW))
+
+    sketch.close(1)
+
+    assert recorder.states == []
+
+
 def test_segments_arriving_while_a_draw_is_in_flight_are_batched_into_the_next_draw() -> None:
     drawer = FakeDrawer(FLOW)
     drawer.gate = threading.Event()

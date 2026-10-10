@@ -237,6 +237,7 @@ class DiagramSet:
     def __init__(self) -> None:
         self._diagrams: list[Diagram] = []
         self._active: Diagram | None = None
+        self._last_number = 0
 
     @property
     def diagrams(self) -> tuple[Diagram, ...]:
@@ -257,6 +258,7 @@ class DiagramSet:
         """An independent copy of every diagram, keeping which one is active."""
         copied = DiagramSet()
         copied._diagrams = [diagram.copy() for diagram in self._diagrams]
+        copied._last_number = self._last_number
         if self._active is not None:
             copied._active = copied.get(self._active.number)
         return copied
@@ -275,8 +277,21 @@ class DiagramSet:
 
     def create(self, kind: DiagramKind) -> Diagram:
         """Open the next numbered diagram; it becomes active."""
-        diagram = Diagram(len(self._diagrams) + 1, kind)
+        self._last_number += 1
+        diagram = Diagram(self._last_number, kind)
         self._diagrams.append(diagram)
         self._active = diagram
         return diagram
+
+    def close(self, number: int) -> bool:
+        """Remove diagram `number`; its number is never used again. When it was active, the next diagram becomes
+        active, else the previous one. False when there is no such diagram."""
+        diagram = self.get(number)
+        if diagram is None:
+            return False
+        index = self._diagrams.index(diagram)
+        self._diagrams.remove(diagram)
+        if self._active is diagram:
+            self._active = self._diagrams[min(index, len(self._diagrams) - 1)] if self._diagrams else None
+        return True
 

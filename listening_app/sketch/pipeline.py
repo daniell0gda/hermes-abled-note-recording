@@ -171,6 +171,18 @@ class SketchPipeline:
             state = self._state(None)
         self._publish(state)
 
+    def close(self, number: int) -> None:
+        """Remove diagram `number` from the sketch, with the lines still waiting to be drawn into it."""
+        with self._changed:
+            if not self._diagrams.close(number):
+                return
+            self._pending = [pending for pending in self._pending if pending.destination.number != number]
+            self._retrospect_requested.discard(number)
+            self._b_requested.discard(number)
+            self._changed.notify_all()
+            state = self._state(None)
+        self._publish(state)
+
     def select(self, number: int, element_ids: list[str]) -> None:
         with self._changed:
             diagram = self._diagrams.get(number)
@@ -261,7 +273,10 @@ class SketchPipeline:
             if swaps != self._b_swaps:
                 log.info("Retrospect dropped diagram %d: BucketB swapped meanwhile", diagram.number)
                 return
-            live = self._diagram(diagram.number)
+            live = self._diagrams.get(diagram.number)
+            if live is None:
+                log.info("Retrospect dropped diagram %d: it was closed", diagram.number)
+                return
             if revision.kind is not None:
                 live.set_kind(revision.kind)
             live.update(structure)
@@ -453,7 +468,10 @@ class SketchPipeline:
         if number is None:
             return self._drawn_routed(first, lines)
         with self._changed:
-            diagram = self._diagram(number).copy()
+            live = self._diagrams.get(number)
+            if live is None:
+                return None
+            diagram = live.copy()
         return diagram, parse_structure(self._drawer.draw(diagram, lines))
 
     def _drawn_routed(self, first: _Pending, lines: list[SpokenLine]) -> tuple[Diagram, Structure] | None:
@@ -474,7 +492,10 @@ class SketchPipeline:
         diagram.transcript += texts
         styles = self._styles(diagram, diagram.update(structure))
         with self._changed:
-            live = self._diagram(diagram.number)
+            live = self._diagrams.get(diagram.number)
+            if live is None:
+                log.info("Live draw dropped: diagram %d was closed", diagram.number)
+                return
             live.transcript += texts
             live.update(structure)
             live.set_styles(*styles)

@@ -43,6 +43,72 @@ def test_an_unknown_number_routes_nowhere() -> None:
     assert len(diagrams.diagrams) == 1
 
 
+def test_a_closed_diagram_is_removed_and_its_number_is_not_used_again() -> None:
+    diagrams = DiagramSet()
+    diagrams.create(DiagramKind.FLOW)
+    diagrams.create(DiagramKind.STATE)
+
+    closed = diagrams.close(2)
+    third = diagrams.create(DiagramKind.TREE)
+
+    assert closed is True
+    assert [diagram.number for diagram in diagrams.diagrams] == [1, 3]
+    assert third.number == 3
+
+
+def test_closing_the_active_diagram_activates_the_next_tab_else_the_previous_one() -> None:
+    diagrams = DiagramSet()
+    first, _, third = (diagrams.create(DiagramKind.FLOW) for _ in range(3))
+    diagrams.activate(2)
+
+    diagrams.close(2)
+    after_middle = diagrams.active
+    diagrams.close(3)
+
+    assert after_middle is third
+    assert diagrams.active is first
+
+
+def test_closing_an_inactive_diagram_keeps_the_active_one() -> None:
+    diagrams = DiagramSet()
+    first = diagrams.create(DiagramKind.FLOW)
+    second = diagrams.create(DiagramKind.FLOW)
+
+    diagrams.close(1)
+
+    assert diagrams.active is second
+    assert first not in diagrams.diagrams
+
+
+def test_closing_the_last_diagram_leaves_none_active() -> None:
+    diagrams = DiagramSet()
+    diagrams.create(DiagramKind.FLOW)
+
+    diagrams.close(1)
+
+    assert diagrams.active is None
+    assert diagrams.diagrams == ()
+
+
+def test_closing_an_unknown_diagram_changes_nothing() -> None:
+    diagrams = DiagramSet()
+    first = diagrams.create(DiagramKind.FLOW)
+
+    assert diagrams.close(7) is False
+    assert diagrams.diagrams == (first,)
+
+
+def test_a_copy_does_not_reuse_the_number_of_a_closed_diagram() -> None:
+    diagrams = DiagramSet()
+    diagrams.create(DiagramKind.FLOW)
+    diagrams.create(DiagramKind.FLOW)
+    diagrams.close(2)
+
+    copied = diagrams.copy()
+
+    assert copied.create(DiagramKind.FLOW).number == 3
+
+
 def test_update_reports_new_and_changed_elements_only() -> None:
     diagram = Diagram(1, DiagramKind.FLOW)
     diagram.update(FIRST)
