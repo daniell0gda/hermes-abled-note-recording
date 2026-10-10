@@ -1,6 +1,7 @@
 //! Edge label placement: every label tries spots next to its own connector, in order of preference,
 //! and takes the first one that covers no node, no other label and no other connector.
 
+use crate::check::is_ambiguous;
 use crate::geom::{segments, Point, Rect, Segment};
 
 pub const LABEL_SIZE: f64 = 8.0;
@@ -12,11 +13,13 @@ const CORNER_ROOM: f64 = 10.0;
 const NODE_CLEARANCE: f64 = 2.0;
 const LINE_CLEARANCE: f64 = 2.0;
 
-/// A label to place: the edge it belongs to, its mask width and the run it should prefer.
+/// A label to place: the edge it belongs to, its mask width, the run it should prefer, and whether
+/// it may overhang that run (a self loop's short top run).
 pub struct LabelRequest {
     pub edge: usize,
     pub mask_width: f64,
     pub preferred: Option<Segment>,
+    pub overhang: bool,
 }
 
 /// Mask rectangles for each request, in request order. Every request gets a spot, even a crowded one.
@@ -43,33 +46,54 @@ fn fallback(request: &LabelRequest, path: &[Point]) -> Rect {
 fn candidates(request: &LabelRequest, path: &[Point]) -> Vec<Rect> {
     let mut runs: Vec<Segment> = segments(path);
     runs.sort_by(|a, b| b.length().total_cmp(&a.length()));
+    let mut spots = Vec::new();
     if let Some(preferred) = request.preferred {
-        runs.insert(0, preferred);
+        if request.overhang {
+            spots.extend(overhanging(&preferred, request.mask_width));
+        }
+        spots.extend(beside(&preferred, request.mask_width));
     }
-    runs.iter().flat_map(|run| beside(run, request.mask_width)).collect()
+    spots.extend(runs.iter().flat_map(|run| beside(run, request.mask_width)));
+    spots
+}
+
+fn overhanging(run: &Segment, width: f64) -> Vec<Rect> {
+    let mid = run.mid();
+    vec![Rect::new(mid.x - width / 2.0, mid.y - LABEL_GAP - MASK_HEIGHT, width, MASK_HEIGHT)]
+}
+
+fn along(lo: f64, hi: f64, size: f64) -> Vec<f64> {
+    let free = hi - lo - size - 2.0 * CORNER_ROOM;
+    if free < 0.0 {
+        return Vec::new();
+    }
+    let middle = lo + CORNER_ROOM + free / 2.0;
+    vec![middle, lo + CORNER_ROOM, lo + CORNER_ROOM + free]
 }
 
 fn beside(run: &Segment, width: f64) -> Vec<Rect> {
-    let mid = run.mid();
+    let (lo, hi) = run.span();
     if run.is_horizontal() {
-        if run.length() < width + 2.0 * CORNER_ROOM {
-            return Vec::new();
-        }
-        let x = mid.x - width / 2.0;
-        vec![
-            Rect::new(x, mid.y - LABEL_GAP - MASK_HEIGHT, width, MASK_HEIGHT),
-            Rect::new(x, mid.y + LABEL_GAP, width, MASK_HEIGHT),
-        ]
+        let y = run.a.y;
+        along(lo, hi, width)
+            .into_iter()
+            .flat_map(|x| {
+                [Rect::new(x, y - LABEL_GAP - MASK_HEIGHT, width, MASK_HEIGHT), Rect::new(x, y + LABEL_GAP, width, MASK_HEIGHT)]
+            })
+            .collect()
     } else {
-        if run.length() < MASK_HEIGHT + 2.0 * CORNER_ROOM {
-            return Vec::new();
-        }
-        let y = mid.y - MASK_HEIGHT / 2.0;
-        vec![Rect::new(mid.x + LABEL_GAP, y, width, MASK_HEIGHT), Rect::new(mid.x - LABEL_GAP - width, y, width, MASK_HEIGHT)]
+        let x = run.a.x;
+        along(lo, hi, MASK_HEIGHT)
+            .into_iter()
+            .flat_map(|y| [Rect::new(x + LABEL_GAP, y, width, MASK_HEIGHT), Rect::new(x - LABEL_GAP - width, y, width, MASK_HEIGHT)])
+            .collect()
     }
 }
 
 fn conflicts(mask: &Rect, edge: usize, paths: &[Vec<Point>], nodes: &[Rect], placed: &[Rect]) -> usize {
+    let runs: Vec<Vec<Segment>> = paths.iter().map(|path| segments(path)).collect();
+    let others: Vec<&[Segment]> = runs.iter().enumerate().filter(|(other, _)| *other != edge).map(|(_, run)| run.as_slice()).collect();
+    let unclear = usize::from(is_ambiguous(mask, &runs[edge], &others));
     let on_nodes = nodes.iter().filter(|node| mask.inflate(NODE_CLEARANCE).overlaps(node)).count();
     let on_labels = placed.iter().filter(|other| mask.inflate(NODE_CLEARANCE).overlaps(other)).count();
     let on_lines: usize = paths
@@ -80,5 +104,5 @@ fn conflicts(mask: &Rect, edge: usize, paths: &[Vec<Point>], nodes: &[Rect], pla
             segments(path).iter().filter(|segment| mask.distance_to(segment) < clearance).count()
         })
         .sum();
-    on_nodes * 4 + on_labels * 4 + on_lines
+    on_nodes * 4 + on_labels * 4 + on_lines * 2 + unclear
 }

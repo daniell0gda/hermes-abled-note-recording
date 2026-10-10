@@ -141,6 +141,24 @@ mod tests {
     }
 
     #[test]
+    fn every_element_stays_inside_the_canvas() {
+        for (name, json) in REFERENCES {
+            for variant in variants(&view(json), &Params::default()) {
+                let scene = scene::build(&view(json), &variant.params);
+                let rects = scene
+                    .nodes
+                    .iter()
+                    .map(|node| node.rect)
+                    .chain(scene.edges.iter().filter_map(|edge| edge.label.as_ref().map(|label| label.rect)));
+                for rect in rects {
+                    let inside = rect.x >= 0.0 && rect.y >= 0.0 && rect.right() <= scene.width && rect.bottom() <= scene.height;
+                    assert!(inside, "{name} {:?}: {rect:?} outside {}x{}", variant.params, scene.width, scene.height);
+                }
+            }
+        }
+    }
+
+    #[test]
     fn the_dark_theme_uses_dark_paper() {
         let rendered = render(&backend(), &Params { theme: Theme::Dark, ..Params::default() });
         assert!(rendered.svg.contains(r##"<rect width="100%" height="100%" fill="#2d3142"/>"##));

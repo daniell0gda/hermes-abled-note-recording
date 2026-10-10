@@ -20,7 +20,33 @@ pub struct Violation {
 pub struct Measures {
     pub crossings: usize,
     pub bends: usize,
+    pub ambiguous_labels: usize,
     pub area: f64,
+}
+
+const AMBIGUITY_MARGIN: f64 = 6.0;
+
+/// True when some other edge's line is about as close to `mask` as the label's own line,
+/// so a reader cannot tell which connector the label belongs to.
+pub fn is_ambiguous(mask: &Rect, own: &[Segment], others: &[&[Segment]]) -> bool {
+    let nearest = |segments: &[Segment]| segments.iter().map(|segment| mask.distance_to(segment)).fold(f64::INFINITY, f64::min);
+    let own_distance = nearest(own);
+    others.iter().any(|segments| nearest(segments) < own_distance + AMBIGUITY_MARGIN)
+}
+
+fn ambiguous_labels(scene: &Scene, runs: &[Vec<Segment>]) -> usize {
+    scene
+        .edges
+        .iter()
+        .enumerate()
+        .filter(|(edge, data)| {
+            data.label.as_ref().is_some_and(|label| {
+                let others: Vec<&[Segment]> =
+                    runs.iter().enumerate().filter(|(other, _)| other != edge).map(|(_, segments)| segments.as_slice()).collect();
+                is_ambiguous(&label.rect, &runs[*edge], &others)
+            })
+        })
+        .count()
 }
 
 pub fn check(scene: &Scene) -> (Vec<Violation>, Measures) {
@@ -35,6 +61,7 @@ pub fn check(scene: &Scene) -> (Vec<Violation>, Measures) {
     let measures = Measures {
         crossings: crossings(&runs),
         bends: runs.iter().map(|edge| edge.len().saturating_sub(1)).sum(),
+        ambiguous_labels: ambiguous_labels(scene, &runs),
         area: scene.width * scene.height,
     };
     (violations, measures)

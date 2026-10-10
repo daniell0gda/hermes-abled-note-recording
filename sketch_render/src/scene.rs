@@ -96,6 +96,51 @@ pub fn build(view: &View, params: &Params) -> Scene {
         Kind::Sequence => sequence::build(view),
         _ => layered(view, params),
     }
+    .fitted_to_canvas()
+}
+
+impl Scene {
+    fn lowest_corner(&self) -> (f64, f64) {
+        let rects = self
+            .nodes
+            .iter()
+            .map(|node| node.rect)
+            .chain(self.zones.iter().map(|zone| zone.rect))
+            .chain(self.edges.iter().filter_map(|edge| edge.label.as_ref().map(|label| label.rect)));
+        let corners = rects.map(|rect| Point::new(rect.x, rect.y)).chain(self.edges.iter().flat_map(|edge| edge.points.iter().copied()));
+        corners.fold((f64::INFINITY, f64::INFINITY), |(x, y), point| (x.min(point.x), y.min(point.y)))
+    }
+
+    fn fitted_to_canvas(mut self) -> Scene {
+        let (low_x, low_y) = self.lowest_corner();
+        let dx = if low_x.is_finite() { snap_up((MARGIN - low_x).max(0.0)) } else { 0.0 };
+        let dy = if low_y.is_finite() { snap_up((MARGIN - low_y).max(0.0)) } else { 0.0 };
+        if dx == 0.0 && dy == 0.0 {
+            return self;
+        }
+        let shift = |rect: &mut Rect| *rect = Rect::new(rect.x + dx, rect.y + dy, rect.w, rect.h);
+        let shift_point = |point: &mut Point| *point = Point::new(point.x + dx, point.y + dy);
+        self.nodes.iter_mut().for_each(|node| shift(&mut node.rect));
+        self.zones.iter_mut().for_each(|zone| shift(&mut zone.rect));
+        for edge in &mut self.edges {
+            edge.points.iter_mut().for_each(shift_point);
+            if let Some(label) = &mut edge.label {
+                shift(&mut label.rect);
+            }
+        }
+        for lifeline in &mut self.lifelines {
+            shift_point(&mut lifeline.a);
+            shift_point(&mut lifeline.b);
+        }
+        for lane in &mut self.lanes {
+            lane.top += dy;
+            lane.bottom += dy;
+        }
+        self.lane_gutter += dx;
+        self.width += dx;
+        self.height += dy;
+        self
+    }
 }
 
 fn layered(view: &View, params: &Params) -> Scene {
@@ -140,7 +185,12 @@ fn layered(view: &View, params: &Params) -> Scene {
         .iter()
         .enumerate()
         .filter(|(_, edge)| !edge.text.is_empty())
-        .map(|(index, edge)| LabelRequest { edge: index, mask_width: mask_width(&edge.text), preferred: preferred[index] })
+        .map(|(index, edge)| LabelRequest {
+            edge: index,
+            mask_width: mask_width(&edge.text),
+            preferred: preferred[index],
+            overhang: edge.source == edge.target,
+        })
         .collect();
     let masks = place(&requests, &paths, &rects);
     let mut labels: HashMap<usize, Rect> = requests.iter().zip(masks).map(|(request, mask)| (request.edge, mask)).collect();

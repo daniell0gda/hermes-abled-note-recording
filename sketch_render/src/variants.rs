@@ -6,13 +6,16 @@ use crate::params::{Direction, Params};
 use crate::spec::{Kind, View};
 use crate::{render, Rendered, Report};
 
-const NODE_GAPS: [f64; 3] = [32.0, 40.0, 48.0];
+const NODE_GAPS: [f64; 3] = [32.0, 40.0, 56.0];
+const CHANNELS: [f64; 2] = [64.0, 112.0];
 const VIOLATION_COST: f64 = 1000.0;
 const CROSSING_COST: f64 = 40.0;
+const AMBIGUITY_COST: f64 = 25.0;
 const BEND_COST: f64 = 2.0;
 const AREA_UNIT: f64 = 20_000.0;
 const WIDEST_RATIO: f64 = 2.5;
 const RATIO_COST: f64 = 30.0;
+const TURNED_COST: f64 = 12.0;
 
 /// One tried parameter set with its checker report and score (lower is better).
 #[derive(Clone, Debug, Serialize)]
@@ -31,8 +34,10 @@ pub fn candidates(view: &View, base: &Params) -> Vec<Params> {
     let mut all = Vec::new();
     for direction in directions {
         for node_gap in NODE_GAPS {
-            for uniform_rank_size in [true, false] {
-                all.push(Params { direction, node_gap, uniform_rank_size, ..*base });
+            for min_channel in CHANNELS {
+                for uniform_rank_size in [true, false] {
+                    all.push(Params { direction, node_gap, min_channel, uniform_rank_size, ..*base });
+                }
             }
         }
     }
@@ -45,7 +50,9 @@ pub fn variants(view: &View, base: &Params) -> Vec<Variant> {
         .into_iter()
         .map(|params| {
             let report = render(view, &params).report;
-            Variant { params, score: score(&report), report }
+            let turned = params.direction_for(view.kind) != base.direction_for(view.kind);
+            let score = score(&report) + if turned { TURNED_COST } else { 0.0 };
+            Variant { params, score, report }
         })
         .collect();
     tried.sort_by(|a, b| a.score.total_cmp(&b.score));
@@ -63,6 +70,7 @@ pub fn score(report: &Report) -> f64 {
     let ratio = (report.width / report.height).max(report.height / report.width);
     report.violations.len() as f64 * VIOLATION_COST
         + measures.crossings as f64 * CROSSING_COST
+        + measures.ambiguous_labels as f64 * AMBIGUITY_COST
         + measures.bends as f64 * BEND_COST
         + measures.area / AREA_UNIT
         + (ratio - WIDEST_RATIO).max(0.0) * RATIO_COST

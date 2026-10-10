@@ -9,7 +9,7 @@ use crate::params::Direction;
 
 const MIN_ZONE: f64 = 24.0;
 const JOG_LIMIT: f64 = 16.0;
-const PORT_MARGIN: f64 = 12.0;
+const PORT_MARGIN: f64 = 8.0;
 
 /// Which run of a hop carries the edge label.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -208,7 +208,29 @@ fn ports(layered: &Layered) -> (Vec<f64>, Vec<f64>) {
             from_v[index] = to_v[index];
         }
     }
+    separate_close_runs(layered, &mut from_v, &mut to_v);
     (from_v, to_v)
+}
+
+fn separate_close_runs(layered: &Layered, from_v: &mut [f64], to_v: &mut [f64]) {
+    let rank_of = |hop: usize| layered.vertices[layered.hops[hop].from].rank;
+    for i in 0..layered.hops.len() {
+        for j in (0..layered.hops.len()).filter(|&j| j != i && rank_of(j) == rank_of(i)) {
+            let bending = from_v[i] != to_v[i] && from_v[j] != to_v[j];
+            if !bending || !runs_beside(to_v[i], from_v[j]) {
+                continue;
+            }
+            let away = if to_v[i] >= from_v[j] { 1.0 } else { -1.0 };
+            let (target, source) = (&layered.hops[i], &layered.hops[j]);
+            let moved_end = from_v[j] + away * CLEARANCE;
+            let moved_start = to_v[i] - away * CLEARANCE;
+            if sole_port_reaches(layered, target.to, target.to_slot, moved_end) {
+                to_v[i] = moved_end;
+            } else if sole_port_reaches(layered, source.from, source.from_slot, moved_start) {
+                from_v[j] = moved_start;
+            }
+        }
+    }
 }
 
 fn sole_port_reaches(layered: &Layered, vertex: usize, slot: (usize, usize), v: f64) -> bool {
@@ -256,15 +278,13 @@ fn channel(
     let band = used.saturating_sub(1) as f64 * track_gap;
     let mut source_zone = MIN_ZONE;
     let mut target_zone = MIN_ZONE;
-    let mut whole: f64 = 0.0;
     for plan in plans.iter().flatten().filter(|plan| members.contains(&plan.hop)) {
         match plan.run {
             LabelRun::Source => source_zone = source_zone.max(plan.need),
-            LabelRun::Target => target_zone = target_zone.max(plan.need),
-            LabelRun::Whole => whole = whole.max(plan.need),
+            LabelRun::Target | LabelRun::Whole => target_zone = target_zone.max(plan.need),
         }
     }
-    let width = snap_up(min_channel.max(source_zone + band + target_zone).max(whole));
+    let width = snap_up(min_channel.max(source_zone + band + target_zone));
     source_zone += (width - (source_zone + band + target_zone)) / 2.0;
     let tracks = members.iter().zip(tracks).filter_map(|(&hop, track)| track.map(|track| (hop, track))).collect();
     (Channel { tracks, source_zone, track_gap }, width)
@@ -278,28 +298,49 @@ fn strictly_inside(value: f64, (lo, hi): (f64, f64)) -> bool {
     value > lo + 0.5 && value < hi - 0.5
 }
 
-fn assign_tracks(members: &[usize], from_v: &[f64], to_v: &[f64]) -> Vec<Option<usize>> {
-    let bending: Vec<usize> = (0..members.len()).filter(|&i| from_v[members[i]] != to_v[members[i]]).collect();
-    let mut before: Vec<Vec<usize>> = vec![Vec::new(); members.len()];
-    for &i in &bending {
-        for &j in &bending {
-            if i == j {
-                continue;
-            }
+struct TrackOrder {
+    must: Vec<Vec<usize>>,
+    should: Vec<Vec<usize>>,
+}
+
+impl TrackOrder {
+    fn before(&self, hop: usize) -> impl Iterator<Item = &usize> {
+        self.must[hop].iter().chain(&self.should[hop])
+    }
+}
+
+fn track_order(members: &[usize], bending: &[usize], from_v: &[f64], to_v: &[f64]) -> TrackOrder {
+    let mut must: Vec<Vec<usize>> = vec![Vec::new(); members.len()];
+    let mut should: Vec<Vec<usize>> = vec![Vec::new(); members.len()];
+    for &i in bending {
+        for &j in bending.iter().filter(|&&j| j != i) {
             let other = interval(members[j], from_v, to_v);
             let starts_inside = strictly_inside(from_v[members[i]], other);
             let ends_inside = strictly_inside(to_v[members[i]], other);
             if starts_inside && !ends_inside {
-                before[j].push(i);
+                should[j].push(i);
             } else if ends_inside && !starts_inside {
-                before[i].push(j);
+                should[i].push(j);
+            }
+            if runs_beside(to_v[members[i]], from_v[members[j]]) {
+                must[i].push(j);
             }
         }
     }
-    let order = topological(&bending, &before);
+    for hop in 0..members.len() {
+        let contradicted: Vec<usize> = should[hop].iter().copied().filter(|&p| must[p].contains(&hop)).collect();
+        should[hop].retain(|p| !contradicted.contains(p));
+    }
+    TrackOrder { must, should }
+}
+
+fn assign_tracks(members: &[usize], from_v: &[f64], to_v: &[f64]) -> Vec<Option<usize>> {
+    let bending: Vec<usize> = (0..members.len()).filter(|&i| from_v[members[i]] != to_v[members[i]]).collect();
+    let constraints = track_order(members, &bending, from_v, to_v);
+    let order = topological(&bending, &constraints);
     let mut tracks: Vec<Option<usize>> = vec![None; members.len()];
     for &i in &order {
-        let lowest = before[i].iter().filter_map(|&p| tracks[p]).map(|track| track + 1).max().unwrap_or(0);
+        let lowest = constraints.before(i).filter_map(|&p| tracks[p]).map(|track| track + 1).max().unwrap_or(0);
         let own = interval(members[i], from_v, to_v);
         let mut track = lowest;
         while order.iter().any(|&j| tracks[j] == Some(track) && too_close(own, interval(members[j], from_v, to_v))) {
@@ -309,18 +350,27 @@ fn assign_tracks(members: &[usize], from_v: &[f64], to_v: &[f64]) -> Vec<Option<
     }
     tracks
 }
+const CLEARANCE: f64 = 12.0;
 
 fn too_close(a: (f64, f64), b: (f64, f64)) -> bool {
-    const CLEARANCE: f64 = 12.0;
     a.0 < b.1 + CLEARANCE && b.0 < a.1 + CLEARANCE
 }
 
-fn topological(nodes: &[usize], before: &[Vec<usize>]) -> Vec<usize> {
+fn runs_beside(a: f64, b: f64) -> bool {
+    (a - b).abs() < CLEARANCE
+}
+
+fn topological(nodes: &[usize], constraints: &TrackOrder) -> Vec<usize> {
     let mut pending: Vec<usize> = nodes.to_vec();
     let mut done: Vec<usize> = Vec::with_capacity(nodes.len());
     while !pending.is_empty() {
-        let waiting = |node: usize| before[node].iter().filter(|p| pending.contains(p)).count();
-        let next_position = (0..pending.len()).min_by_key(|&k| (waiting(pending[k]), pending[k])).expect("pending is not empty");
+        let waiting = |list: &Vec<usize>| list.iter().filter(|p| pending.contains(p)).count();
+        let next_position = (0..pending.len())
+            .min_by_key(|&k| {
+                let hop = pending[k];
+                (waiting(&constraints.must[hop]), waiting(&constraints.should[hop]), hop)
+            })
+            .expect("pending is not empty");
         done.push(pending.remove(next_position));
     }
     done
