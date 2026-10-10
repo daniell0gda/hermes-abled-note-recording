@@ -153,7 +153,7 @@ def test_sketch_defaults(config_file: Path) -> None:
 
     assert sketch.hotkey == "ctrl+alt+d"
     assert sketch.jev_model == "jev-latest"
-    assert sketch.draw_model == "xai/grok-4-fast-non-reasoning"
+    assert sketch.draw_model == "xai/grok-4-1-fast-non-reasoning"
     assert sketch.label_language is Language.AUTO
     assert sketch.point_radius_px == 24
     assert sketch.point_window_s == 2

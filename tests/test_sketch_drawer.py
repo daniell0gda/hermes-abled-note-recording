@@ -179,6 +179,13 @@ def test_a_nous_portal_key_comes_with_the_portal_base(monkeypatch: pytest.Monkey
     assert credentials_provider(config)() == Credentials("nous-test", NOUS_API_BASE)
 
 
+def test_an_openrouter_key_comes_from_its_environment_variable(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "or-test")
+    config = AppConfig.model_validate({"sketch": {"draw_model": "openrouter/anthropic/claude-sonnet-4.6"}})
+
+    assert credentials_provider(config)() == Credentials("or-test")
+
+
 class FakeLitellm:
     def __init__(self) -> None:
         self.calls: list[dict[str, Any]] = []
@@ -186,6 +193,18 @@ class FakeLitellm:
     def completion(self, **options: Any) -> SimpleNamespace:
         self.calls.append(options)
         return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="diagram"))])
+
+
+def test_an_openrouter_model_is_sent_to_litellm_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = FakeLitellm()
+    monkeypatch.setattr(drawer_module, "import_litellm", lambda: fake)
+
+    litellm_completion("openrouter/anthropic/claude-sonnet-4.6", [{"role": "user", "content": "draw"}],
+                       Credentials("or-test"))
+
+    assert fake.calls[-1]["model"] == "openrouter/anthropic/claude-sonnet-4.6"
+    assert "api_base" not in fake.calls[-1]
+    assert fake.calls[-1]["api_key"] == "or-test"
 
 
 def test_a_nous_model_is_sent_through_litellm_openai_route_to_the_portal(monkeypatch: pytest.MonkeyPatch) -> None:
