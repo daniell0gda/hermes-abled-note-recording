@@ -9,9 +9,11 @@ mod node;
 mod params;
 mod route;
 mod scene;
+mod sequence;
 mod spec;
 mod svg;
 mod text;
+mod variants;
 
 use std::time::Instant;
 
@@ -20,6 +22,7 @@ use serde::Serialize;
 pub use check::{Measures, Violation};
 pub use params::{Direction, Params, Theme};
 pub use spec::{EdgeStyle, Kind, Shape, View};
+pub use variants::{candidates, render_best, variants, Variant};
 
 const FONTS_URL: &str = "https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap";
 
@@ -101,14 +104,46 @@ svg {{ display: block; max-width: 100%; height: auto; }}
 mod tests {
     use super::*;
 
+    const REFERENCES: [(&str, &str); 6] = [
+        ("backend", include_str!("../tests/backend.json")),
+        ("hiring", include_str!("../tests/hiring.json")),
+        ("issue", include_str!("../tests/issue.json")),
+        ("login", include_str!("../tests/login.json")),
+        ("order", include_str!("../tests/order.json")),
+        ("org", include_str!("../tests/org.json")),
+    ];
+
+    fn view(json: &str) -> View {
+        serde_json::from_str(json).expect("fixture parses")
+    }
+
     fn backend() -> View {
-        serde_json::from_str(include_str!("../tests/backend.json")).expect("fixture parses")
+        view(REFERENCES[0].1)
     }
 
     #[test]
-    fn the_backend_reference_breaks_no_connector_rule() {
-        let rendered = render(&backend(), &Params::default());
-        assert!(rendered.report.violations.is_empty(), "{:#?}", rendered.report.violations);
+    fn every_reference_talk_breaks_no_connector_rule() {
+        for (name, json) in REFERENCES {
+            let rendered = render(&view(json), &Params::default());
+            assert!(rendered.report.violations.is_empty(), "{name}: {:#?}", rendered.report.violations);
+        }
+    }
+
+    #[test]
+    fn the_best_variant_is_valid_and_no_worse_than_the_default() {
+        for (name, json) in REFERENCES {
+            let reference = view(json);
+            let default_score = variants::score(&render(&reference, &Params::default()).report);
+            let best = render_best(&reference, &Params::default());
+            assert!(best.report.violations.is_empty(), "{name}: {:#?}", best.report.violations);
+            assert!(variants::score(&best.report) <= default_score, "{name}");
+        }
+    }
+
+    #[test]
+    fn the_dark_theme_uses_dark_paper() {
+        let rendered = render(&backend(), &Params { theme: Theme::Dark, ..Params::default() });
+        assert!(rendered.svg.contains(r##"<rect width="100%" height="100%" fill="#2d3142"/>"##));
     }
 
     #[test]

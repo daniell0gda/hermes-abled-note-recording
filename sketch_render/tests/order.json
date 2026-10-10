@@ -1,0 +1,101 @@
+{
+ "number": 1,
+ "title": "Life of a shop order",
+ "kind": "state",
+ "nodes": [
+  {
+   "id": "pending",
+   "label": "Pending",
+   "shape": "state",
+   "focal": false
+  },
+  {
+   "id": "paid",
+   "label": "Paid",
+   "shape": "state",
+   "focal": false
+  },
+  {
+   "id": "shipped",
+   "label": "Shipped",
+   "shape": "state",
+   "focal": false
+  },
+  {
+   "id": "delivered",
+   "label": "Delivered",
+   "shape": "state",
+   "focal": false
+  },
+  {
+   "id": "returned",
+   "label": "Returned",
+   "shape": "state",
+   "focal": false
+  },
+  {
+   "id": "cancelled",
+   "label": "Cancelled",
+   "shape": "state",
+   "focal": false
+  }
+ ],
+ "edges": [
+  {
+   "id": "pending->paid",
+   "source": "pending",
+   "target": "paid",
+   "label": "payment goes through",
+   "style": "transition"
+  },
+  {
+   "id": "pending->cancelled",
+   "source": "pending",
+   "target": "cancelled",
+   "label": "payment fails 3 times",
+   "style": "transition"
+  },
+  {
+   "id": "paid->shipped",
+   "source": "paid",
+   "target": "shipped",
+   "label": "warehouse picks it up",
+   "style": "transition"
+  },
+  {
+   "id": "paid->cancelled",
+   "source": "paid",
+   "target": "cancelled",
+   "label": "cancel before shipping",
+   "style": "transition"
+  },
+  {
+   "id": "shipped->delivered",
+   "source": "shipped",
+   "target": "delivered",
+   "label": "courier confirms",
+   "style": "transition"
+  },
+  {
+   "id": "delivered->returned",
+   "source": "delivered",
+   "target": "returned",
+   "label": "sent back within 2 weeks, refund",
+   "style": "transition"
+  }
+ ],
+ "groups": [
+  {
+   "id": "happy_path",
+   "label": "Happy path",
+   "members": [
+    "pending",
+    "paid",
+    "shipped",
+    "delivered"
+   ]
+  }
+ ],
+ "selected": [],
+ "pointed": null
+}

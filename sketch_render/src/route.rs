@@ -332,8 +332,8 @@ mod tests {
     use crate::layout::{layer, NodeBox};
 
     fn routed(edges: &[(usize, usize)], count: usize) -> Routed {
-        let boxes = vec![NodeBox { su: 120.0, sv: 60.0, room_low: 0.0 }; count];
-        let layered = layer(&boxes, edges, 40.0, 8);
+        let boxes = vec![NodeBox { su: 120.0, sv: 60.0, room_low: 0.0, lane: 0 }; count];
+        let layered = layer(&boxes, edges, 40.0, 8, false);
         route(&layered, count, &vec![0.0; edges.len()], Direction::Right, 64.0, 12.0, true)
     }
 

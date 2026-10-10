@@ -1,17 +1,17 @@
 //! The layout choices a model may make. Every value has a safe default.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::spec::Kind;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Direction {
     Right,
     Down,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Theme {
     #[default]
@@ -20,7 +20,7 @@ pub enum Theme {
 }
 
 /// Layout parameters. `direction` None means the kind's usual direction.
-#[derive(Clone, Copy, Debug, Deserialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub struct Params {
     pub direction: Option<Direction>,

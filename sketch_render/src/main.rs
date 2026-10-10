@@ -2,15 +2,18 @@ use std::io::Read;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use sketch_render::{page, render, Params, View};
+use sketch_render::{page, render, render_best, variants, Params, View};
 
-const USAGE: &str = "usage: sketch-render <view.json|-> [--out <file.html|file.svg>] [--params <json>] [--report]";
+const USAGE: &str =
+    "usage: sketch-render <view.json|-> [--out <file.html|file.svg>] [--params <json>] [--best] [--variants] [--report]";
 
 struct Options {
     input: String,
     out: Option<PathBuf>,
     params: Params,
     report: bool,
+    best: bool,
+    list_variants: bool,
 }
 
 fn main() -> ExitCode {
@@ -27,7 +30,12 @@ fn run() -> Result<(), String> {
     let options = parse_args(std::env::args().skip(1).collect())?;
     let text = read_input(&options.input)?;
     let view: View = serde_json::from_str(&text).map_err(|error| format!("invalid view JSON: {error}"))?;
-    let rendered = render(&view, &options.params);
+    if options.list_variants {
+        let listing = serde_json::to_string_pretty(&variants(&view, &options.params)).map_err(|error| error.to_string())?;
+        println!("{listing}");
+        return Ok(());
+    }
+    let rendered = if options.best { render_best(&view, &options.params) } else { render(&view, &options.params) };
     if options.report {
         let report = serde_json::to_string(&rendered.report).map_err(|error| error.to_string())?;
         eprintln!("{report}");
@@ -49,6 +57,8 @@ fn parse_args(args: Vec<String>) -> Result<Options, String> {
     let mut out = None;
     let mut params = Params::default();
     let mut report = false;
+    let mut best = false;
+    let mut list_variants = false;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -58,11 +68,13 @@ fn parse_args(args: Vec<String>) -> Result<Options, String> {
                 params = serde_json::from_str(&json).map_err(|error| format!("invalid params JSON: {error}"))?;
             }
             "--report" => report = true,
+            "--best" => best = true,
+            "--variants" => list_variants = true,
             _ if input.is_none() => input = Some(arg),
             _ => return Err(USAGE.to_string()),
         }
     }
-    Ok(Options { input: input.ok_or(USAGE)?, out, params, report })
+    Ok(Options { input: input.ok_or(USAGE)?, out, params, report, best, list_variants })
 }
 
 fn read_input(input: &str) -> Result<String, String> {

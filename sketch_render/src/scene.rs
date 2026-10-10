@@ -2,13 +2,14 @@
 
 use std::collections::HashMap;
 
-use crate::geom::{Point, Rect, Segment};
+use crate::geom::{snap_up, Point, Rect, Segment};
 use crate::label::{place, LabelRequest, LABEL_SIZE, LABEL_TRACKING, MASK_HEIGHT, MASK_PADDING};
 use crate::layout::{layer, NodeBox};
 use crate::node::{content, NodeContent};
 use crate::params::{Direction, Params};
 use crate::route::route;
-use crate::spec::{EdgeStyle, View};
+use crate::sequence;
+use crate::spec::{EdgeStyle, Kind, View};
 use crate::text::mono_width;
 
 pub const MARGIN: f64 = 40.0;
@@ -18,6 +19,9 @@ const LOOP_INSET: f64 = 16.0;
 const LABEL_RUN_ROOM: f64 = 24.0;
 const ZONE_PADDING: f64 = 16.0;
 const ZONE_HEADER: f64 = 16.0;
+pub const LANE_LABEL_SIZE: f64 = 9.0;
+pub const LANE_LABEL_TRACKING: f64 = 0.14;
+const LANE_RULE_INSET: f64 = 16.0;
 
 pub struct SceneNode {
     pub id: String,
@@ -43,39 +47,79 @@ pub struct Zone {
     pub rect: Rect,
 }
 
+pub struct Lane {
+    pub label: String,
+    pub top: f64,
+    pub bottom: f64,
+}
+
 pub struct Scene {
+    pub kind: Kind,
     pub nodes: Vec<SceneNode>,
     pub edges: Vec<SceneEdge>,
     pub zones: Vec<Zone>,
     pub skipped_zones: usize,
+    pub lifelines: Vec<Segment>,
+    pub lanes: Vec<Lane>,
+    pub lane_gutter: f64,
     pub width: f64,
     pub height: f64,
 }
 
-struct EdgeInput {
-    source: usize,
-    target: usize,
-    style: EdgeStyle,
-    text: String,
+impl Scene {
+    pub fn empty(kind: Kind) -> Scene {
+        Scene {
+            kind,
+            nodes: Vec::new(),
+            edges: Vec::new(),
+            zones: Vec::new(),
+            skipped_zones: 0,
+            lifelines: Vec::new(),
+            lanes: Vec::new(),
+            lane_gutter: 0.0,
+            width: 0.0,
+            height: 0.0,
+        }
+    }
 }
 
-/// Lays out, routes and labels `view`.
+pub struct EdgeInput {
+    pub source: usize,
+    pub target: usize,
+    pub style: EdgeStyle,
+    pub text: String,
+}
+
+/// Lays out, routes and labels `view` with the layout its kind calls for.
 pub fn build(view: &View, params: &Params) -> Scene {
-    let direction = params.direction_for(view.kind);
+    match view.kind {
+        Kind::Sequence => sequence::build(view),
+        _ => layered(view, params),
+    }
+}
+
+fn layered(view: &View, params: &Params) -> Scene {
     let (ids, contents) = unique_nodes(view);
     let edges = known_edges(view, &ids);
+    let lanes = lane_plan(view, &ids);
+    let direction = if lanes.is_some() { Direction::Right } else { params.direction_for(view.kind) };
     let (loops, links): (Vec<&EdgeInput>, Vec<&EdgeInput>) = edges.iter().partition(|edge| edge.source == edge.target);
     let boxes: Vec<NodeBox> = contents
         .iter()
         .enumerate()
-        .map(|(index, node)| node_box(node, direction, loops.iter().filter(|edge| edge.source == index).count()))
+        .map(|(index, node)| {
+            let lane = lanes.as_ref().map_or(0, |plan| plan.of_node[index]);
+            node_box(node, direction, loops.iter().filter(|edge| edge.source == index).count(), lane)
+        })
         .collect();
     let pairs: Vec<(usize, usize)> = links.iter().map(|edge| (edge.source, edge.target)).collect();
-    let layered = layer(&boxes, &pairs, params.node_gap, params.ordering_sweeps);
+    let layered = layer(&boxes, &pairs, params.node_gap, params.ordering_sweeps, lanes.is_some());
     let needs: Vec<f64> = links.iter().map(|edge| run_need(&edge.text, direction)).collect();
     let routed = route(&layered, contents.len(), &needs, direction, params.min_channel, params.track_gap, params.uniform_rank_size);
-    let offset = |point: Point| Point::new(point.x + MARGIN, point.y + MARGIN);
-    let rects: Vec<Rect> = routed.rects.iter().map(|rect| Rect::new(rect.x + MARGIN, rect.y + MARGIN, rect.w, rect.h)).collect();
+    let gutter = lanes.as_ref().map_or(0.0, LanePlan::gutter);
+    let left = MARGIN + gutter;
+    let offset = |point: Point| Point::new(point.x + left, point.y + MARGIN);
+    let rects: Vec<Rect> = routed.rects.iter().map(|rect| Rect::new(rect.x + left, rect.y + MARGIN, rect.w, rect.h)).collect();
     let mut paths: Vec<Vec<Point>> = routed.paths.iter().map(|path| path.iter().copied().map(offset).collect()).collect();
     let mut preferred: Vec<Option<Segment>> = routed
         .preferred
@@ -118,12 +162,64 @@ pub fn build(view: &View, params: &Params) -> Scene {
         .zip(&rects)
         .map(|((id, content), &rect)| SceneNode { id, rect, content })
         .collect();
-    let (zones, skipped_zones) = zones(view, &nodes);
-    let (width, height) = extent(&nodes, &scene_edges, &zones);
-    Scene { nodes, edges: scene_edges, zones, skipped_zones, width, height }
+    let scene_lanes: Vec<Lane> = lanes.map_or_else(Vec::new, |plan| plan.placed(&layered.lane_bands));
+    let (zones, skipped_zones) = if scene_lanes.is_empty() { zones(view, &nodes) } else { (Vec::new(), 0) };
+    let (width, content_height) = extent(&nodes, &scene_edges, &zones);
+    let height = scene_lanes.last().map_or(content_height, |lane| content_height.max(lane.bottom + MARGIN));
+    Scene {
+        nodes,
+        edges: scene_edges,
+        zones,
+        skipped_zones,
+        lanes: scene_lanes,
+        lane_gutter: MARGIN + gutter - LANE_RULE_INSET,
+        width,
+        height,
+        ..Scene::empty(view.kind)
+    }
 }
 
-fn unique_nodes(view: &View) -> (Vec<String>, Vec<NodeContent>) {
+struct LanePlan {
+    labels: Vec<String>,
+    of_node: Vec<usize>,
+}
+
+impl LanePlan {
+    fn gutter(&self) -> f64 {
+        let widest = self.labels.iter().map(|label| mono_width(label, LANE_LABEL_SIZE, LANE_LABEL_TRACKING)).fold(0.0, f64::max);
+        snap_up(widest + 2.0 * LANE_RULE_INSET)
+    }
+
+    fn placed(self, bands: &[(f64, f64)]) -> Vec<Lane> {
+        self.labels
+            .into_iter()
+            .zip(bands)
+            .map(|(label, &(top, bottom))| Lane { label, top: top + MARGIN, bottom: bottom + MARGIN })
+            .collect()
+    }
+}
+
+fn lane_plan(view: &View, ids: &[String]) -> Option<LanePlan> {
+    if view.kind != Kind::Swimlane || view.groups.is_empty() {
+        return None;
+    }
+    let mut labels: Vec<String> = view
+        .groups
+        .iter()
+        .map(|group| if group.label.is_empty() { group.id.to_uppercase() } else { group.label.to_uppercase() })
+        .collect();
+    let outside = labels.len();
+    let of_node: Vec<usize> = ids
+        .iter()
+        .map(|id| view.groups.iter().position(|group| group.members.contains(id)).unwrap_or(outside))
+        .collect();
+    if of_node.contains(&outside) {
+        labels.push(String::new());
+    }
+    Some(LanePlan { labels, of_node })
+}
+
+pub fn unique_nodes(view: &View) -> (Vec<String>, Vec<NodeContent>) {
     let mut ids: Vec<String> = Vec::new();
     let mut contents = Vec::new();
     for spec in &view.nodes {
@@ -135,7 +231,7 @@ fn unique_nodes(view: &View) -> (Vec<String>, Vec<NodeContent>) {
     (ids, contents)
 }
 
-fn known_edges(view: &View, ids: &[String]) -> Vec<EdgeInput> {
+pub fn known_edges(view: &View, ids: &[String]) -> Vec<EdgeInput> {
     let index_of = |id: &str| ids.iter().position(|known| known == id);
     view.edges
         .iter()
@@ -143,14 +239,21 @@ fn known_edges(view: &View, ids: &[String]) -> Vec<EdgeInput> {
             Some(EdgeInput {
                 source: index_of(&edge.source)?,
                 target: index_of(&edge.target)?,
-                style: edge.style,
+                style: drawn_style(view.kind, edge.style),
                 text: edge.label.trim().to_uppercase(),
             })
         })
         .collect()
 }
 
-fn mask_width(text: &str) -> f64 {
+fn drawn_style(kind: Kind, style: EdgeStyle) -> EdgeStyle {
+    match (kind, style) {
+        (Kind::Tree, EdgeStyle::Sync) => EdgeStyle::Data,
+        _ => style,
+    }
+}
+
+pub fn mask_width(text: &str) -> f64 {
     mono_width(text, LABEL_SIZE, LABEL_TRACKING) + 2.0 * MASK_PADDING
 }
 
@@ -162,11 +265,11 @@ fn run_need(text: &str, direction: Direction) -> f64 {
     }
 }
 
-fn node_box(node: &NodeContent, direction: Direction, loops: usize) -> NodeBox {
+fn node_box(node: &NodeContent, direction: Direction, loops: usize, lane: usize) -> NodeBox {
     let room_low = if loops == 0 { 0.0 } else { LOOP_RISE + 2.0 * MASK_HEIGHT + 4.0 };
     match direction {
-        Direction::Right => NodeBox { su: node.width, sv: node.height, room_low },
-        Direction::Down => NodeBox { su: node.height, sv: node.width, room_low },
+        Direction::Right => NodeBox { su: node.width, sv: node.height, room_low, lane },
+        Direction::Down => NodeBox { su: node.height, sv: node.width, room_low, lane },
     }
 }
 

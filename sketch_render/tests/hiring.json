@@ -1,0 +1,156 @@
+{
+ "number": 1,
+ "title": "How hiring works",
+ "kind": "swimlane",
+ "nodes": [
+  {
+   "id": "job_description",
+   "label": "Write job description",
+   "shape": "service",
+   "focal": false
+  },
+  {
+   "id": "technical_interview",
+   "label": "Technical interview",
+   "shape": "service",
+   "focal": false
+  },
+  {
+   "id": "decide",
+   "label": "Decide",
+   "shape": "service",
+   "focal": false
+  },
+  {
+   "id": "post_job",
+   "label": "Post job",
+   "shape": "service",
+   "focal": false
+  },
+  {
+   "id": "screen",
+   "label": "Screen candidates",
+   "shape": "service",
+   "focal": false
+  },
+  {
+   "id": "rejection",
+   "label": "Send polite rejection",
+   "shape": "service",
+   "focal": false
+  },
+  {
+   "id": "team_interview",
+   "label": "Team interview",
+   "shape": "service",
+   "focal": false
+  },
+  {
+   "id": "offer",
+   "label": "Make offer",
+   "shape": "service",
+   "focal": false
+  },
+  {
+   "id": "onboarding",
+   "label": "Onboarding paperwork",
+   "shape": "service",
+   "focal": false
+  }
+ ],
+ "edges": [
+  {
+   "id": "job_description->post_job",
+   "source": "job_description",
+   "target": "post_job",
+   "label": "",
+   "style": "sync"
+  },
+  {
+   "id": "post_job->screen",
+   "source": "post_job",
+   "target": "screen",
+   "label": "",
+   "style": "sync"
+  },
+  {
+   "id": "screen->technical_interview",
+   "source": "screen",
+   "target": "technical_interview",
+   "label": "good ones",
+   "style": "sync"
+  },
+  {
+   "id": "technical_interview->team_interview",
+   "source": "technical_interview",
+   "target": "team_interview",
+   "label": "likes them",
+   "style": "sync"
+  },
+  {
+   "id": "technical_interview->rejection",
+   "source": "technical_interview",
+   "target": "rejection",
+   "label": "not",
+   "style": "sync"
+  },
+  {
+   "id": "team_interview->decide",
+   "source": "team_interview",
+   "target": "decide",
+   "label": "feedback",
+   "style": "sync"
+  },
+  {
+   "id": "decide->offer",
+   "source": "decide",
+   "target": "offer",
+   "label": "",
+   "style": "sync"
+  },
+  {
+   "id": "offer->onboarding",
+   "source": "offer",
+   "target": "onboarding",
+   "label": "if signed",
+   "style": "sync"
+  }
+ ],
+ "groups": [
+  {
+   "id": "manager",
+   "label": "Hiring manager",
+   "members": [
+    "job_description",
+    "technical_interview",
+    "decide"
+   ]
+  },
+  {
+   "id": "recruiter",
+   "label": "Recruiter",
+   "members": [
+    "post_job",
+    "screen",
+    "rejection"
+   ]
+  },
+  {
+   "id": "engineers",
+   "label": "Engineers",
+   "members": [
+    "team_interview"
+   ]
+  },
+  {
+   "id": "hr",
+   "label": "HR",
+   "members": [
+    "offer",
+    "onboarding"
+   ]
+  }
+ ],
+ "selected": [],
+ "pointed": null
+}

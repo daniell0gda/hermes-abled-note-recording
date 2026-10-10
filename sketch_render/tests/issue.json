@@ -1,0 +1,183 @@
+{
+ "number": 1,
+ "title": "Issue workflow",
+ "kind": "swimlane",
+ "nodes": [
+  {
+   "id": "create_issue",
+   "label": "Create-issue skill",
+   "shape": "service",
+   "focal": false
+  },
+  {
+   "id": "start_issue",
+   "label": "Start-issue skill",
+   "shape": "service",
+   "focal": false
+  },
+  {
+   "id": "issue",
+   "label": "Issue",
+   "shape": "service",
+   "focal": false
+  },
+  {
+   "id": "run_workflow",
+   "label": "Run workflow",
+   "shape": "service",
+   "focal": false
+  },
+  {
+   "id": "review",
+   "label": "Review artifacts",
+   "shape": "service",
+   "focal": false
+  },
+  {
+   "id": "planner",
+   "label": "Planner",
+   "shape": "service",
+   "focal": false
+  },
+  {
+   "id": "implementor",
+   "label": "Implementor",
+   "shape": "service",
+   "focal": false
+  },
+  {
+   "id": "checker",
+   "label": "Checker",
+   "shape": "service",
+   "focal": false
+  },
+  {
+   "id": "manual_tester",
+   "label": "Manual tester",
+   "shape": "service",
+   "focal": false
+  }
+ ],
+ "edges": [
+  {
+   "id": "create_issue->issue",
+   "source": "create_issue",
+   "target": "issue",
+   "label": "opens",
+   "style": "sync"
+  },
+  {
+   "id": "create_issue->start_issue",
+   "source": "create_issue",
+   "target": "start_issue",
+   "label": "",
+   "style": "sync"
+  },
+  {
+   "id": "start_issue->run_workflow",
+   "source": "start_issue",
+   "target": "run_workflow",
+   "label": "runs",
+   "style": "sync"
+  },
+  {
+   "id": "run_workflow->planner",
+   "source": "run_workflow",
+   "target": "planner",
+   "label": "assigns",
+   "style": "sync"
+  },
+  {
+   "id": "planner->implementor",
+   "source": "planner",
+   "target": "implementor",
+   "label": "plan",
+   "style": "sync"
+  },
+  {
+   "id": "implementor->checker",
+   "source": "implementor",
+   "target": "checker",
+   "label": "",
+   "style": "sync"
+  },
+  {
+   "id": "checker->implementor",
+   "source": "checker",
+   "target": "implementor",
+   "label": "not satisfied",
+   "style": "sync"
+  },
+  {
+   "id": "checker->manual_tester",
+   "source": "checker",
+   "target": "manual_tester",
+   "label": "visual check",
+   "style": "sync"
+  },
+  {
+   "id": "checker->review",
+   "source": "checker",
+   "target": "review",
+   "label": "work good",
+   "style": "sync"
+  },
+  {
+   "id": "manual_tester->review",
+   "source": "manual_tester",
+   "target": "review",
+   "label": "",
+   "style": "sync"
+  },
+  {
+   "id": "review->issue",
+   "source": "review",
+   "target": "issue",
+   "label": "mark done",
+   "style": "sync"
+  }
+ ],
+ "groups": [
+  {
+   "id": "you",
+   "label": "You",
+   "members": [
+    "create_issue",
+    "start_issue"
+   ]
+  },
+  {
+   "id": "github",
+   "label": "GitHub",
+   "members": [
+    "issue"
+   ]
+  },
+  {
+   "id": "leader",
+   "label": "Team leader",
+   "members": [
+    "run_workflow",
+    "review"
+   ]
+  },
+  {
+   "id": "team",
+   "label": "Team",
+   "members": [
+    "planner",
+    "implementor",
+    "checker"
+   ]
+  },
+  {
+   "id": "tester",
+   "label": "Manual tester",
+   "members": [
+    "manual_tester"
+   ]
+  }
+ ],
+ "selected": [],
+ "pointed": null
+}

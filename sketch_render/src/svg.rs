@@ -6,7 +6,7 @@ use crate::geom::{segments, Point, Rect, Segment};
 use crate::label::{LABEL_SIZE, LABEL_TRACKING};
 use crate::node::{tag_width, Treatment, NAME_LINE, NAME_SIZE, SUB_LINE, SUB_SIZE, TAG_SIZE, TAG_TRACKING};
 use crate::params::Theme;
-use crate::scene::{Scene, SceneEdge, SceneNode, MARGIN};
+use crate::scene::{Scene, SceneEdge, SceneNode, LANE_LABEL_SIZE, LANE_LABEL_TRACKING, MARGIN};
 use crate::spec::{EdgeStyle, View};
 use crate::text::mono_width;
 
@@ -91,8 +91,20 @@ pub fn draw(scene: &Scene, view: &View, theme: Theme, legend: bool) -> String {
     let _ = write!(out, r#"<desc id="{slug}-desc">{}</desc>"#, escape(&description(scene, view)));
     markers(&mut out, palette);
     let _ = write!(out, r#"<rect width="100%" height="100%" fill="{}"/>"#, palette.paper);
+    draw_lanes(&mut out, scene, width, palette);
     for zone in &scene.zones {
         draw_zone(&mut out, &zone.rect, &zone.label, palette);
+    }
+    for lifeline in &scene.lifelines {
+        let _ = write!(
+            out,
+            r#"<line x1="{}" y1="{}" x2="{}" y2="{}" stroke="rgba({},0.30)" stroke-width="1" stroke-dasharray="4,4"/>"#,
+            lifeline.a.x,
+            lifeline.a.y,
+            lifeline.b.x,
+            lifeline.b.y,
+            palette.wash
+        );
     }
     let hops = hops(scene);
     for (index, edge) in scene.edges.iter().enumerate() {
@@ -343,6 +355,37 @@ fn draw_node(out: &mut String, node: &SceneNode, palette: &Palette) {
     }
 }
 
+fn draw_lanes(out: &mut String, scene: &Scene, width: f64, palette: &Palette) {
+    let (Some(first), Some(last)) = (scene.lanes.first(), scene.lanes.last()) else { return };
+    let rule = |out: &mut String, y: f64| {
+        let _ = write!(
+            out,
+            r#"<line x1="{MARGIN}" y1="{y}" x2="{}" y2="{y}" stroke="rgba({},0.14)" stroke-width="1"/>"#,
+            width - MARGIN,
+            palette.wash
+        );
+    };
+    for lane in &scene.lanes {
+        rule(out, lane.top);
+        let _ = write!(
+            out,
+            r#"<text x="{MARGIN}" y="{}" fill="{}" font-size="{LANE_LABEL_SIZE}" font-family="{MONO}" letter-spacing="{LANE_LABEL_TRACKING}em">{}</text>"#,
+            (lane.top + lane.bottom) / 2.0 + 3.0,
+            palette.muted,
+            escape(&lane.label)
+        );
+    }
+    rule(out, last.bottom);
+    let _ = write!(
+        out,
+        r#"<line x1="{x}" y1="{}" x2="{x}" y2="{}" stroke="rgba({},0.14)" stroke-width="1"/>"#,
+        first.top,
+        last.bottom,
+        palette.wash,
+        x = scene.lane_gutter
+    );
+}
+
 fn draw_zone(out: &mut String, rect: &Rect, label: &str, palette: &Palette) {
     let _ = write!(
         out,
@@ -403,21 +446,17 @@ fn legend_items(scene: &Scene) -> Vec<LegendItem> {
         (EdgeStyle::Async, "ASYNC"),
         (EdgeStyle::Dependency, "DEPENDS ON"),
     ];
-    let mut items: Vec<LegendItem> = boxes
+    let used_boxes: Vec<LegendItem> = boxes
         .into_iter()
         .filter(|(treatment, _)| scene.nodes.iter().any(|node| node.content.treatment == *treatment))
         .map(|(treatment, text)| LegendItem::Box(treatment, text))
         .collect();
-    items.extend(
-        lines
-            .into_iter()
-            .filter(|(style, _)| scene.edges.iter().any(|edge| edge.style == *style))
-            .map(|(style, text)| LegendItem::Line(style, text)),
-    );
-    if items.len() < 2 {
-        items.clear();
-    }
-    items
+    let used_lines: Vec<LegendItem> = lines
+        .into_iter()
+        .filter(|(style, _)| scene.edges.iter().any(|edge| edge.style == *style))
+        .map(|(style, text)| LegendItem::Line(style, text))
+        .collect();
+    [used_boxes, used_lines].into_iter().filter(|kinds| kinds.len() >= 2).flatten().collect()
 }
 
 fn draw_legend(out: &mut String, items: &[LegendItem], top: f64, width: f64, palette: &Palette) {

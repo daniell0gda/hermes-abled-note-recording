@@ -1,0 +1,100 @@
+{
+ "number": 1,
+ "title": "Login with Google",
+ "kind": "sequence",
+ "nodes": [
+  {
+   "id": "google",
+   "label": "Google",
+   "shape": "service",
+   "focal": false
+  },
+  {
+   "id": "browser",
+   "label": "Browser",
+   "shape": "service",
+   "focal": false
+  },
+  {
+   "id": "backend",
+   "label": "Backend",
+   "shape": "service",
+   "focal": false
+  }
+ ],
+ "edges": [
+  {
+   "id": "browser->browser",
+   "source": "browser",
+   "target": "browser",
+   "label": "click sign in",
+   "style": "sync"
+  },
+  {
+   "id": "browser->google",
+   "source": "browser",
+   "target": "google",
+   "label": "redirect to login page",
+   "style": "sync"
+  },
+  {
+   "id": "browser->google#2",
+   "source": "browser",
+   "target": "google",
+   "label": "password",
+   "style": "sync"
+  },
+  {
+   "id": "google->browser",
+   "source": "google",
+   "target": "browser",
+   "label": "redirect with code",
+   "style": "sync"
+  },
+  {
+   "id": "browser->backend",
+   "source": "browser",
+   "target": "backend",
+   "label": "callback with code",
+   "style": "sync"
+  },
+  {
+   "id": "backend->google",
+   "source": "backend",
+   "target": "google",
+   "label": "exchange code",
+   "style": "sync"
+  },
+  {
+   "id": "google->backend",
+   "source": "google",
+   "target": "backend",
+   "label": "token",
+   "style": "sync"
+  },
+  {
+   "id": "backend->backend",
+   "source": "backend",
+   "target": "backend",
+   "label": "create session",
+   "style": "sync"
+  },
+  {
+   "id": "backend->browser",
+   "source": "backend",
+   "target": "browser",
+   "label": "set cookie",
+   "style": "sync"
+  },
+  {
+   "id": "browser->backend#2",
+   "source": "browser",
+   "target": "backend",
+   "label": "request with cookie",
+   "style": "sync"
+  }
+ ],
+ "groups": [],
+ "selected": [],
+ "pointed": null
+}
