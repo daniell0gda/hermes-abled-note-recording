@@ -28,7 +28,8 @@ The summary lines per model:
 
 - `draw median` and `draw max`: the drawing step. This is what decides the live speed.
 - `total median`: Jev plus draw.
-- `parse errors`: draws the line-format parser rejected. Any non-zero count fails the model.
+- `parse errors`: draws the line-format parser rejected, and draws that came back empty. Any non-zero count fails the model.
+- `nodes=[]` in a run's summary: the draw parsed to no nodes. Treat that model as failed even if parse errors are 0.
 - `invented`: nodes the speaker never said. Keep the list empty.
 
 ## Picking a model

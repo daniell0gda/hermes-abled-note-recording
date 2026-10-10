@@ -12,17 +12,16 @@ import winreg
 from pathlib import Path
 
 import httpx
-import litellm
-from litellm.llms.xai.oauth import XAIOAuthAuthenticator
 
-from listening_app.transcriber import grok_access_token
+from listening_app.config import load_config, resolve_config_path
+from listening_app.sketch.drawer import Credentials, credentials_provider, litellm_completion
 
 GEN = Path(__file__).resolve().parents[4] / ".gen"
 ARGS = [a for a in sys.argv[1:] if not a.startswith("--")]
 FORMAT = ARGS[0] if ARGS else "lines"
 RUNS = int(ARGS[1]) if len(ARGS) > 1 else 1
 STYLE = "--style" in sys.argv
-DRAW_MODEL = sys.argv[sys.argv.index("--model") + 1] if "--model" in sys.argv else "xai/grok-4-fast-non-reasoning"
+DRAW_MODEL = sys.argv[sys.argv.index("--model") + 1] if "--model" in sys.argv else "xai/grok-4-1-fast-non-reasoning"
 ROUTE_CONFIDENCE = 0.4
 
 SEGMENTS = [
@@ -194,10 +193,8 @@ def draw_prompt(diagram: dict, new: str) -> str:
     )
 
 
-def draw(token: str, base: str, diagram: dict, new: str) -> str:
-    response = litellm.completion(model=DRAW_MODEL, api_key=token, api_base=base, temperature=0,
-                                  messages=[{"role": "user", "content": draw_prompt(diagram, new)}], max_tokens=1500)
-    return response.choices[0].message.content or ""
+def draw(credentials: Credentials, diagram: dict, new: str) -> str:
+    return litellm_completion(DRAW_MODEL, [{"role": "user", "content": draw_prompt(diagram, new)}], credentials)
 
 
 def mermaid_errors(sources: list[str]) -> list[str | None]:
@@ -212,7 +209,7 @@ def report(name: str, values: list[float]) -> str:
     return f"{name:6} n={len(values):2} median={statistics.median(values):5.2f}s max={max(values):5.2f}s"
 
 
-def run_once(client: httpx.Client, token: str, base: str) -> dict:
+def run_once(client: httpx.Client, credentials: Credentials) -> dict:
     diagrams: list[dict] = []
     current: dict | None = None
     times = {"jev": [], "draw": [], "style": [], "total": []}
@@ -239,7 +236,7 @@ def run_once(client: httpx.Client, token: str, base: str) -> dict:
             current = next(d for d in diagrams if f"d{d['number']}" == target)
         low = " LOW" if confidence < ROUTE_CONFIDENCE else ""
         draw_start = time.perf_counter()
-        text = draw(token, base, current, segment)
+        text = draw(credentials, current, segment)
         times["draw"].append(time.perf_counter() - draw_start)
         outputs.append(text)
         current["transcript"].append(segment)
@@ -269,17 +266,19 @@ def run_once(client: httpx.Client, token: str, base: str) -> dict:
     if FORMAT == "mermaid":
         errors = mermaid_errors(outputs)
     else:
-        errors = [("; ".join(parse_lines(o)["errors"]) or None) for o in outputs]
+        errors = [("empty answer" if not o.strip() else "; ".join(parse_lines(o)["errors"]) or None) for o in outputs]
     return {"times": times, "errors": errors, "outputs": outputs, "log": log, "diagrams": diagrams}
 
 
 def main() -> None:
-    token, base = grok_access_token(), XAIOAuthAuthenticator().get_api_base()
+    config = load_config(resolve_config_path())
+    config = config.model_copy(update={"sketch": config.sketch.model_copy(update={"draw_model": DRAW_MODEL})})
+    credentials = credentials_provider(config)()
     client = httpx.Client(headers={"Authorization": f"Bearer {typesafe_key()}"}, timeout=30)
     totals = {"jev": [], "draw": [], "style": [], "total": []}
     error_count = draw_count = 0
     for run in range(RUNS):
-        result = run_once(client, token, base)
+        result = run_once(client, credentials)
         print(f"--- run {run + 1} ({FORMAT}, {DRAW_MODEL})")
         print("\n".join(result["log"]))
         for key in totals:
