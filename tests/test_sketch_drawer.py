@@ -1,11 +1,23 @@
 from collections.abc import Callable
+from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
 from listening_app.config import AppConfig, Language
 from listening_app.sketch import drawer as drawer_module
 from listening_app.sketch.diagrams import Destination, Diagram, DiagramKind, DiagramSet
-from listening_app.sketch.drawer import Credentials, Drawer, Revision, RoutedDrawing, SpokenLine, credentials_provider, parse_revision
+from listening_app.sketch.drawer import (
+    NOUS_API_BASE,
+    Credentials,
+    Drawer,
+    Revision,
+    RoutedDrawing,
+    SpokenLine,
+    credentials_provider,
+    litellm_completion,
+    parse_revision,
+)
 from listening_app.sketch.structure import StructureError, parse_structure
 
 CURRENT = 'title "Request path"\nauth "Auth service"\nredis "Redis"\nauth -> redis "caches tokens"'
@@ -158,6 +170,54 @@ def test_an_api_key_is_used_as_is(monkeypatch: pytest.MonkeyPatch) -> None:
     config = AppConfig.model_validate({"sketch": {"draw_model": "openai/gpt-4.1-mini"}})
 
     assert credentials_provider(config)() == Credentials("sk-test")
+
+
+def test_a_nous_portal_key_comes_with_the_portal_base(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("NOUS_API_KEY", "nous-test")
+    config = AppConfig.model_validate({"sketch": {"draw_model": "nous/anthropic/claude-sonnet-4.6"}})
+
+    assert credentials_provider(config)() == Credentials("nous-test", NOUS_API_BASE)
+
+
+def test_an_openrouter_key_comes_from_its_environment_variable(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "or-test")
+    config = AppConfig.model_validate({"sketch": {"draw_model": "openrouter/anthropic/claude-sonnet-4.6"}})
+
+    assert credentials_provider(config)() == Credentials("or-test")
+
+
+class FakeLitellm:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+
+    def completion(self, **options: Any) -> SimpleNamespace:
+        self.calls.append(options)
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="diagram"))])
+
+
+def test_an_openrouter_model_is_sent_to_litellm_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = FakeLitellm()
+    monkeypatch.setattr(drawer_module, "import_litellm", lambda: fake)
+
+    litellm_completion("openrouter/anthropic/claude-sonnet-4.6", [{"role": "user", "content": "draw"}],
+                       Credentials("or-test"))
+
+    assert fake.calls[-1]["model"] == "openrouter/anthropic/claude-sonnet-4.6"
+    assert "api_base" not in fake.calls[-1]
+    assert fake.calls[-1]["api_key"] == "or-test"
+
+
+def test_a_nous_model_is_sent_through_litellm_openai_route_to_the_portal(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = FakeLitellm()
+    monkeypatch.setattr(drawer_module, "import_litellm", lambda: fake)
+
+    answer = litellm_completion("nous/anthropic/claude-sonnet-4.6", [{"role": "user", "content": "draw"}],
+                                Credentials("nous-test", NOUS_API_BASE))
+
+    assert answer == "diagram"
+    assert fake.calls[-1]["model"] == "openai/anthropic/claude-sonnet-4.6"
+    assert fake.calls[-1]["api_base"] == NOUS_API_BASE
+    assert fake.calls[-1]["api_key"] == "nous-test"
 
 
 def test_retrospect_prompt_uses_the_full_transcript_and_asks_to_reconcile() -> None:

@@ -34,6 +34,8 @@ providers:                    # env vars override these, e.g. GROQ_API_KEY, OPEN
   groq:   { api_key: "" }
   openai: { api_key: "" }
   xai:    { api_key: "", grok_auth: false }   # grok_auth: true = your Grok account ("Authorize Grok" in the tray) instead of a key
+  nous:   { api_key: "" }                     # Nous Portal; NOUS_API_KEY overrides this. Draw model: nous/<model>, e.g. nous/anthropic/claude-sonnet-4.6
+  openrouter: { api_key: "" }                 # OpenRouter; OPENROUTER_API_KEY overrides this. Draw model: openrouter/<vendor>/<model>, e.g. openrouter/anthropic/claude-sonnet-4.6
 
 hermes:
   enabled: true
@@ -51,7 +53,7 @@ sketch:                       # live sketch: draws what you explain (microphone 
   hotkey: "ctrl+alt+d"        # global on/off hotkey, independent of recording; "" disables it
   jev_model: jev-latest       # TypeSafe model that routes segments and picks element styles
   api_key: ""                 # TypeSafe key; TYPESAFE_API_KEY overrides this. Missing = the drawing model also routes
-  draw_model: xai/grok-4-fast-non-reasoning   # litellm chat model; key as for transcription models (providers.*)
+  draw_model: xai/grok-4-1-fast-non-reasoning   # litellm chat model; key as for transcription models (providers.*)
   label_language: auto        # auto (= spoken language) | pl | en
   point_radius_px: 24         # mouse held within this radius ...
   point_window_s: 2           # ... for this long points at the element under it

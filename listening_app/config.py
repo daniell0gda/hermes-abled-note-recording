@@ -119,7 +119,7 @@ class SketchConfig(_Section):
     hotkey: str = "ctrl+alt+d"
     jev_model: str = "jev-latest"
     api_key: SecretStr = SecretStr("")
-    draw_model: str = "xai/grok-4-fast-non-reasoning"
+    draw_model: str = "xai/grok-4-1-fast-non-reasoning"
     label_language: Language = Language.AUTO
     point_radius_px: int = Field(default=24, ge=1)
     point_window_s: float = Field(default=2, gt=0)
