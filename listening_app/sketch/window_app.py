@@ -33,10 +33,19 @@ def window_page() -> str:
 <div class="sk-tools">
 <button class="sk-tool" id="mic" type="button" aria-pressed="false" disabled><span class="sk-mic-dot"></span><span id="mic-label">Mic off</span></button>
 <button class="sk-tool" id="copy-path" type="button" disabled>Copy path</button>
+<button class="sk-tool" id="saved" type="button">Saved diagrams</button>
 </div>
 </header>
 <main class="sk-canvas" id="canvas"><svg id="sketch" role="img" aria-label="Live sketch"></svg></main>
 </div>
+<section class="sk-saved" id="saved-panel" role="dialog" aria-labelledby="saved-title" hidden>
+<div class="sk-saved-card">
+<header class="sk-saved-head"><h2 class="sk-saved-title" id="saved-title">Saved diagrams</h2>
+<button class="sk-tool" id="saved-close" type="button">Close</button></header>
+<p class="sk-saved-empty" id="saved-empty" hidden>No saved diagrams yet.</p>
+<ul class="sk-saved-list" id="saved-list"></ul>
+</div>
+</section>
 <div class="sk-warmup"><svg id="warmup"></svg></div>
 <div class="sk-notice" id="notice" role="status"></div>
 <script>{asset("dagre.min.js")}</script>

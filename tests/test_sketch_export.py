@@ -3,7 +3,9 @@ import re
 from pathlib import Path
 from typing import Any
 
-from listening_app.sketch.export import DiagramFiles, diagram_page, file_name
+import pytest
+
+from listening_app.sketch.export import DiagramFiles, diagram_page, file_name, read_diagram
 
 
 def view(number: int = 1, title: str = "Request path", label: str = "Auth service") -> dict[str, Any]:
@@ -72,3 +74,18 @@ def test_a_diagrams_path_follows_its_latest_title(tmp_path: Path) -> None:
 
     assert files.path(1) == tmp_path / "01-request-path.html"
     assert files.path(2) is None
+
+
+def test_a_saved_page_gives_back_the_view_it_was_written_from(tmp_path: Path) -> None:
+    original = view(label="Auth service")
+    DiagramFiles(tmp_path).save(original)
+
+    assert read_diagram(tmp_path / "01-request-path.html") == original
+
+
+def test_a_page_without_a_diagram_is_refused(tmp_path: Path) -> None:
+    page = tmp_path / "notes.html"
+    page.write_text("<html><body>not a diagram</body></html>", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="holds no diagram"):
+        read_diagram(page)

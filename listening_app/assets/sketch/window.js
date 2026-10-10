@@ -2,7 +2,7 @@
  * Live sketch window: tabs per diagram, rendering, and the pointer / click / tab / mic / copy events sent back to Python
  * through `window.pywebview.api.event`. Python calls `SketchApp.receive(message)`.
  * Ctrl + mouse wheel zooms at the mouse, dragging moves the view, Ctrl+0 resets it; a new tab starts unzoomed.
- * A middle-click on a tab closes that diagram.
+ * A middle-click on a tab closes that diagram. "Saved diagrams" lists the saved ones; picking one sends its path back.
  */
 (function (global) {
   "use strict";
@@ -24,6 +24,11 @@
   const mic = document.getElementById("mic");
   const micLabel = document.getElementById("mic-label");
   const copyPath = document.getElementById("copy-path");
+  const savedButton = document.getElementById("saved");
+  const savedPanel = document.getElementById("saved-panel");
+  const savedList = document.getElementById("saved-list");
+  const savedEmpty = document.getElementById("saved-empty");
+  const savedClose = document.getElementById("saved-close");
   const empty = { number: 0, title: "", kind: "flow", nodes: [], edges: [], groups: [], selected: [], pointed: null };
 
   let views = [];
@@ -157,6 +162,35 @@
     mic.disabled = false;
   }
 
+  function showSaved(diagrams) {
+    savedList.replaceChildren(...diagrams.map((diagram) => {
+      const item = document.createElement("li");
+      const button = document.createElement("button");
+      button.className = "sk-saved-item";
+      button.type = "button";
+      const name = document.createElement("span");
+      name.textContent = diagram.title || "Untitled diagram";
+      const started = document.createElement("span");
+      started.className = "sk-saved-time";
+      started.textContent = diagram.started;
+      button.append(name, started);
+      button.addEventListener("click", () => openSaved(diagram.path));
+      item.append(button);
+      return item;
+    }));
+    savedEmpty.hidden = diagrams.length > 0;
+    savedPanel.hidden = false;
+  }
+
+  function hideSaved() {
+    savedPanel.hidden = true;
+  }
+
+  function openSaved(path) {
+    hideSaved();
+    send({ type: "open-saved", path });
+  }
+
   function receive(message) {
     if (message.type === "state") {
       const switched = message.active !== active;
@@ -173,6 +207,8 @@
       showNotice(message.text);
     } else if (message.type === "microphone") {
       showMicrophone(message.on);
+    } else if (message.type === "saved") {
+      showSaved(message.diagrams);
     }
   }
 
@@ -181,6 +217,8 @@
     send({ type: "microphone" });
   });
   copyPath.addEventListener("click", () => send({ type: "copy-path", number: active }));
+  savedButton.addEventListener("click", () => send({ type: "saved" }));
+  savedClose.addEventListener("click", hideSaved);
 
   canvas.addEventListener("wheel", (event) => {
     if (!event.ctrlKey) return;
@@ -196,6 +234,7 @@
     event.stopPropagation();
   }, true);
   global.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") hideSaved();
     if (!(event.ctrlKey && event.key === "0")) return;
     event.preventDefault();
     resetCamera();

@@ -530,3 +530,17 @@ def test_retrospect_can_change_diagram_kind() -> None:
     assert drawer.retrospect_calls == [1]
     assert latest_view(recorder)["kind"] == "swimlane"
     assert [node["id"] for node in latest_view(recorder)["nodes"]] == ["user", "planner"]
+
+
+def test_a_restored_diagram_is_published_as_the_active_one_with_its_content() -> None:
+    original, original_recorder = pipeline(FakeJudge(FIRST), FakeDrawer(FLOW))
+    original.route(segment("Auth caches tokens in Redis."))
+    original.draw_next()
+    saved = latest_view(original_recorder)
+    sketch, recorder = pipeline(FakeJudge(FIRST), FakeDrawer(FLOW))
+
+    sketch.restore(saved)
+
+    assert recorder.states[-1].active == 1
+    assert recorder.states[-1].updated == 1
+    assert latest_view(recorder) == saved

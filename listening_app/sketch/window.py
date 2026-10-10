@@ -9,6 +9,7 @@ from collections.abc import Callable
 from typing import Any
 
 from listening_app import paths
+from listening_app.sketch.library import SavedDiagram
 from listening_app.sketch.pipeline import SketchState
 
 log = logging.getLogger(__name__)
@@ -50,6 +51,11 @@ class SketchWindow:
 
     def notice(self, text: str) -> None:
         self._send({"type": "notice", "text": text})
+
+    def saved(self, diagrams: list[SavedDiagram]) -> None:
+        self._send({"type": "saved", "diagrams": [
+            {"path": str(diagram.path), "title": diagram.title, "started": f"{diagram.started:%Y-%m-%d %H:%M}"}
+            for diagram in diagrams]})
 
     def microphone(self, listening: bool) -> None:
         self._send({"type": "microphone", "on": listening})

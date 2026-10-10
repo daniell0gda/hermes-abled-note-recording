@@ -211,3 +211,18 @@ def test_group_id_colliding_with_a_node_is_renamed() -> None:
     assert [node.id for node in structure.nodes] == ["team", "dev"]
     assert [group.id for group in structure.groups] == ["team_group"]
     assert structure.groups[0].members == ("team", "dev")
+
+
+def test_a_saved_view_restores_as_the_next_numbered_diagram_with_its_content_and_styles() -> None:
+    original = Diagram(1, DiagramKind.FLOW)
+    original.update(FIRST)
+    original.set_styles({"redis": NodeStyle(Shape.CACHE, focal=True)}, {"auth->redis": EdgeStyle.DATA})
+    saved = original.view()
+    diagrams = DiagramSet()
+    diagrams.create(DiagramKind.STATE)
+
+    restored = diagrams.restore(saved)
+
+    assert restored.number == 2
+    assert diagrams.active is restored
+    assert restored.view() == {**saved, "number": 2}

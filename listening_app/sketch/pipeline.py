@@ -180,6 +180,13 @@ class SketchPipeline:
             state = self._state(None)
         self._publish(state)
 
+    def restore(self, view: dict[str, Any]) -> None:
+        """Open a saved diagram, given as its render view, as a new diagram that the next lines continue."""
+        with self._changed:
+            diagram = self._diagrams.restore(view)
+            state = self._state(diagram.number)
+        self._publish(state)
+
     def select(self, number: int, element_ids: list[str]) -> None:
         with self._changed:
             diagram = self._diagrams.get(number)
