@@ -142,6 +142,7 @@ class TrayApp:
             yield Item(f"Finalize unfinished sessions ({controller.unfinished_count})",
                        _safe(controller.finalize_unfinished), enabled=not controller.is_busy)
         yield Item("Open transcripts folder", _safe(controller.open_transcripts))
+        yield Item("Saved diagrams", _safe(controller.open_saved_diagrams))
         yield Item("Open diagrams folder", _safe(controller.open_diagrams))
         yield Item("Open config file", _safe(controller.open_config))
         yield Item("Reload config", _safe(controller.reload_config))

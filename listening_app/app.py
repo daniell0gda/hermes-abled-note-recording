@@ -16,6 +16,7 @@ from listening_app.hotkey import GlobalHotkey, HotkeyError, parse_hotkey
 from listening_app.logging_setup import RedactingFormatter, set_level
 from listening_app.session import RecordingSession, finalize
 from listening_app.sketch.controller import DIAGRAMS_FOLDER, LiveSketch
+from listening_app.sketch.library import write_picker
 from listening_app.transcriber import authorize_grok, grok_authorized, import_litellm
 from listening_app.transcript_store import SessionFiles, find_outboxes, find_unfinished_sessions
 
@@ -317,6 +318,10 @@ class AppController:
         folder = sketch.folder if sketch is not None else self.config.output_path() / DIAGRAMS_FOLDER
         folder.mkdir(parents=True, exist_ok=True)
         os.startfile(folder)
+
+    def open_saved_diagrams(self) -> None:
+        """Write the page that lists every saved diagram and open it in the browser, to pick one."""
+        os.startfile(write_picker(self.config.output_path() / DIAGRAMS_FOLDER))
 
     def open_config(self) -> None:
         try:
