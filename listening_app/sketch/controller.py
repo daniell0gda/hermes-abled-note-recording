@@ -14,9 +14,10 @@ from listening_app.models import SegmentStatus, Source
 from listening_app.session import Notify, RecordingSession, new_session_id
 from listening_app.sketch.drawer import Drawer, SpokenLine, credentials_provider
 from listening_app.sketch.elbow import ElbowRenderer, program_path, system_theme
-from listening_app.sketch.export import DiagramFiles
+from listening_app.sketch.export import DiagramFiles, read_diagram
 from listening_app.sketch.feed import SketchFeed, TranscriptionHandler, typed_lines
 from listening_app.sketch.jev_client import JevClient
+from listening_app.sketch.library import saved_diagram_path, saved_diagrams
 from listening_app.sketch.microphone import MicTranscription
 from listening_app.sketch.pipeline import SketchPipeline, SketchState
 from listening_app.sketch.pointing import Box, PointerTracker
@@ -30,6 +31,7 @@ SKIPPED_NOTICE = "Update skipped, retrying with the next lines"
 PATH_COPIED_NOTICE = "Path copied"
 NOT_SAVED_NOTICE = "This diagram is not saved yet"
 COPY_FAILED_NOTICE = "The clipboard is busy, try again"
+OPEN_FAILED_NOTICE = "This diagram could not be opened"
 
 WindowEvent = dict[str, Any]
 
@@ -58,7 +60,8 @@ class LiveSketch:
         )
         self._pointer = PointerTracker(sketch.point_radius_px, sketch.point_window_s)
         self._pointer_lock = threading.Lock()
-        self.folder = config.output_path() / DIAGRAMS_FOLDER / new_session_id(datetime.now().astimezone())
+        self._root = config.output_path() / DIAGRAMS_FOLDER
+        self.folder = self._root / new_session_id(datetime.now().astimezone())
         self._files = DiagramFiles(self.folder)
         self._file_error_reported = False
         self._window = SketchWindow(self._window_event)
@@ -72,6 +75,7 @@ class LiveSketch:
             "closed": self._window_closed,
             "microphone": self._microphone_toggled, "copy-path": self._copy_path,
             "new-diagram": self._new_diagram,
+            "saved": self._saved_requested, "open-saved": self._open_saved,
         }
 
     def start(self, recording: RecordingSession | None, listen: bool = True) -> None:
@@ -132,6 +136,10 @@ class LiveSketch:
     def file(self, number: int) -> Path | None:
         """The HTML page diagram `number` was last saved to, or None before its first save."""
         return self._files.path(number)
+
+    def show_saved(self) -> None:
+        """List the saved diagrams of every live sketch in the window, to pick one to continue."""
+        self._window.saved(saved_diagrams(self._root))
 
     # SketchListener
 
@@ -251,3 +259,18 @@ class LiveSketch:
 
     def _window_closed(self, event: WindowEvent) -> None:
         self._on_closed()
+
+    def _saved_requested(self, event: WindowEvent) -> None:
+        self.show_saved()
+
+    def _open_saved(self, event: WindowEvent) -> None:
+        path = saved_diagram_path(self._root, str(event["path"]))
+        if path is None:
+            log.warning("Live sketch window asked to open a path that is not a saved diagram: %s", event["path"])
+            self._window.notice(OPEN_FAILED_NOTICE)
+            return
+        try:
+            self._pipeline.restore(read_diagram(path))
+        except (OSError, ValueError, KeyError, TypeError):
+            log.exception("Opening saved diagram %s failed", path)
+            self._window.notice(OPEN_FAILED_NOTICE)

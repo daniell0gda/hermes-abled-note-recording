@@ -16,7 +16,6 @@ from listening_app.hotkey import GlobalHotkey, HotkeyError, parse_hotkey
 from listening_app.logging_setup import RedactingFormatter, set_level
 from listening_app.session import RecordingSession, finalize
 from listening_app.sketch.controller import DIAGRAMS_FOLDER, LiveSketch
-from listening_app.sketch.library import write_picker
 from listening_app.transcriber import authorize_grok, grok_authorized, import_litellm
 from listening_app.transcript_store import SessionFiles, find_outboxes, find_unfinished_sessions
 
@@ -320,8 +319,8 @@ class AppController:
         os.startfile(folder)
 
     def open_saved_diagrams(self) -> None:
-        """Write the page that lists every saved diagram and open it in the browser, to pick one."""
-        os.startfile(write_picker(self.config.output_path() / DIAGRAMS_FOLDER))
+        """Show the saved diagrams in the live sketch window. Live sketch switches on first, without listening."""
+        threading.Thread(target=self._show_saved_diagrams, name="sketch-saved", daemon=True).start()
 
     def open_config(self) -> None:
         try:
@@ -450,6 +449,14 @@ class AppController:
             self._sketch = sketch
             self.notify("Live sketch on", f"Explain what you want drawn. Diagrams are saved in {sketch.folder}")
         return sketch
+
+    def _show_saved_diagrams(self) -> None:
+        if not self.is_sketching:
+            with contextlib.suppress(ControlError):
+                self.start_sketch(listen=False)
+        sketch = self._sketch
+        if sketch is not None:
+            sketch.show_saved()
 
     def _stop_sketch_worker(self) -> None:
         self._stop_sketch()

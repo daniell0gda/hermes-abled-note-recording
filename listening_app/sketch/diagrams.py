@@ -4,7 +4,7 @@ from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from typing import Any
 
-from listening_app.sketch.structure import Structure
+from listening_app.sketch.structure import Edge, Group, Node, Structure
 
 MAX_FOCAL = 2
 
@@ -133,6 +133,23 @@ def _cycle_edges(structure: Structure) -> list[str]:
         if node.id not in done:
             walk(node.id)
     return closing
+
+
+def _structure_of(view: dict[str, Any]) -> Structure:
+    return Structure(
+        view["title"],
+        tuple(Node(node["id"], node["label"]) for node in view["nodes"]),
+        tuple(Edge(edge["id"], edge["source"], edge["target"], edge["label"]) for edge in view["edges"]),
+        tuple(Group(group["id"], group["label"], tuple(group["members"])) for group in view["groups"]),
+    )
+
+
+def _node_styles_of(view: dict[str, Any]) -> dict[str, NodeStyle]:
+    return {node["id"]: NodeStyle(Shape(node["shape"])) for node in view["nodes"]}
+
+
+def _edge_styles_of(view: dict[str, Any]) -> dict[str, EdgeStyle]:
+    return {edge["id"]: EdgeStyle(edge["style"]) for edge in view["edges"]}
 
 
 @dataclass
@@ -281,6 +298,15 @@ class DiagramSet:
         diagram = Diagram(self._last_number, kind)
         self._diagrams.append(diagram)
         self._active = diagram
+        return diagram
+
+    def restore(self, view: dict[str, Any]) -> Diagram:
+        """Open a saved diagram, given as its render view, as the next numbered diagram with its content and styles."""
+        structure = _structure_of(view)
+        focus = tuple(element["id"] for element in (*view["nodes"], *view["edges"]) if element["focal"])
+        diagram = self.create(DiagramKind(view["kind"]))
+        diagram.update(structure)
+        diagram.set_styles(_node_styles_of(view), _edge_styles_of(view), focus)
         return diagram
 
     def close(self, number: int) -> bool:

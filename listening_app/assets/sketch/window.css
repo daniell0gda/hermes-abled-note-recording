@@ -29,3 +29,21 @@
 .sk-tool[aria-pressed="true"] .sk-mic-dot { background: var(--live); animation: sk-blink 1.2s ease-in-out infinite; }
 @keyframes sk-blink { 50% { opacity: 0.15; } }
 .sk-warmup { position: absolute; width: 0; height: 0; overflow: hidden; }
+.sk-saved { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(45, 49, 66, 0.35); }
+.sk-saved[hidden] { display: none; }
+.sk-saved-card {
+  display: flex; flex-direction: column; width: min(560px, calc(100% - 48px)); max-height: calc(100% - 96px);
+  background: var(--paper); border: 1px solid var(--rule); border-radius: 10px; padding: 16px 20px;
+}
+.sk-saved-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sk-saved-title { margin: 0; font: 400 1.4rem/1.2 var(--serif); }
+.sk-saved-empty { margin: 12px 0 0; font: italic 15px var(--serif); color: var(--muted); }
+.sk-saved-empty[hidden] { display: none; }
+.sk-saved-list { list-style: none; margin: 12px 0 0; padding: 0; overflow: auto; }
+.sk-saved-item {
+  display: flex; width: 100%; justify-content: space-between; align-items: baseline; gap: 16px;
+  background: transparent; border: none; border-bottom: 1px solid var(--rule); padding: 10px 2px;
+  font: 500 14px var(--sans); color: var(--ink); text-align: left; cursor: pointer;
+}
+.sk-saved-item:hover { color: var(--link); }
+.sk-saved-time { font: 400 11px var(--mono); color: var(--muted); white-space: nowrap; }

@@ -128,8 +128,10 @@ states and how they connect. Switch it on with **Ctrl+Alt+D** (`sketch.hotkey`) 
 - Every diagram is saved, and rewritten on each update, as a self-contained HTML file:
   `output_dir\diagrams\<sketch id>\NN-<title>.html`. **Copy path** in the window copies the shown diagram's file
   path; **Open diagrams folder** in the tray opens the running sketch's folder, or `output_dir\diagrams`.
-  **Saved diagrams** in the tray opens a page in the browser that lists every saved diagram, newest first;
-  click one to open it. The page is `output_dir\diagrams\index.html`, rewritten each time you open it.
+  **Saved diagrams** in the tray opens the live sketch window (live sketch switches on, not listening) with the
+  list of every saved diagram, newest first. Pick one to open it as a new tab and continue it by speaking; it is
+  saved again in the current sketch's folder, and the original file stays as it was. The window's **Saved
+  diagrams** button shows the same list.
 - Closing the window switches live sketch off. If an answer cannot be drawn, the last good diagram stays and
   "Update skipped" is shown; the same lines are retried with the next ones.
 - v1 is tuned for English speech. Not yet available in the headless MCP mode.

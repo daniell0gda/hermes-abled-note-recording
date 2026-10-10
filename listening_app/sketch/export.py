@@ -14,6 +14,7 @@ SKETCH_ASSETS = paths.ASSETS_DIR / "sketch"
 FONTS_URL = ("https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Geist:wght@400;500;600"
              "&family=Geist+Mono:wght@400;500&display=swap")
 _SLUG_LENGTH = 48
+_EMBEDDED_VIEW = re.compile(r'SketchRenderer\.render\(document\.getElementById\("sketch"\), (.*)\);</script>')
 
 
 @cache
@@ -40,6 +41,15 @@ def drawing(view: dict[str, Any], title: str) -> str:
 <script>{asset("dagre.min.js")}</script>
 <script>{asset("sketch.js")}</script>
 <script>SketchRenderer.render(document.getElementById("sketch"), {script_json(view)});</script>"""
+
+
+def read_diagram(path: Path) -> dict[str, Any]:
+    """The render view that `diagram_page` embedded in the saved page at `path`. Raises ValueError when there is none."""
+    match = _EMBEDDED_VIEW.search(path.read_text(encoding="utf-8"))
+    if match is None:
+        raise ValueError(f"{path.name} holds no diagram")
+    view: dict[str, Any] = json.loads(match[1].replace("<\\/", "</"))
+    return view
 
 
 def diagram_page(view: dict[str, Any]) -> str:
