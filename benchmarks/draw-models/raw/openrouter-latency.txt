@@ -1,0 +1,159 @@
+=== openrouter/google/gemini-2.5-flash-lite
+--- run 1 (lines, openrouter/google/gemini-2.5-flash-lite)
+ 1 jev=0.41s struct=0.22 new=0.03 target=new(1.00) skip
+ 2 jev=0.30s struct=0.95 new=0.02 target=new(1.00) -> d1 sequence draw=9.11s
+ 3 jev=0.29s struct=0.93 new=0.03 target=d1(0.68) -> d1 sequence draw=0.37s
+ 4 jev=0.22s struct=0.94 new=0.03 target=d1(0.80) -> d1 sequence draw=0.40s
+ 5 jev=0.24s struct=0.94 new=0.02 target=d1(0.82) -> d1 sequence draw=0.52s
+ 6 jev=0.25s struct=0.94 new=0.02 target=d1(0.88) -> d1 sequence draw=0.49s
+ 7 jev=0.25s struct=0.02 new=0.02 target=d1(0.96) skip
+ 8 jev=0.29s struct=0.93 new=0.02 target=d1(0.78) -> d1 sequence draw=0.59s
+ 9 jev=0.24s struct=0.93 new=0.02 target=d1(0.78) -> d1 sequence draw=0.62s
+10 jev=0.25s struct=0.88 new=0.02 target=d1(0.96) -> d1 sequence draw=0.68s
+11 jev=0.24s struct=0.22 new=0.96 target=new(0.68) -> d2 flow draw=0.30s
+12 jev=0.24s struct=0.95 new=0.07 target=d2(1.00) -> d2 flow draw=0.32s
+13 jev=0.25s struct=0.92 new=0.03 target=d2(1.00) -> d2 flow draw=0.38s
+14 jev=0.27s struct=0.98 new=0.03 target=d2(1.00) -> d2 flow draw=0.39s
+15 jev=0.27s struct=0.97 new=0.03 target=d2(0.97) -> d2 flow draw=0.47s
+16 jev=0.23s struct=0.05 new=0.04 target=d1(0.97) skip
+17 jev=0.23s struct=0.94 new=0.04 target=d1(0.52) -> d1 sequence draw=0.82s
+18 jev=0.23s struct=0.89 new=0.03 target=d2(0.70) -> d2 flow draw=0.46s
+19 jev=0.23s struct=0.93 new=0.03 target=d2(1.00) -> d2 flow draw=0.67s
+20 jev=0.29s struct=0.02 new=0.02 target=d2(0.94) skip
+d1 sequence 'Browser to API Gateway' nodes=['browser', 'api_gateway', 'auth_service', 'order_service', 'postgres_db', 'kafka_topic', 'billing_service', 'notification_service', 'redis_cache', 'rate_limiter'] invented=[]
+d2 flow 'Order Lifecycle' nodes=['draft', 'paid', 'shipped', 'refunded', 'delivered', 'expired'] invented=[]
+--- run 2 (lines, openrouter/google/gemini-2.5-flash-lite)
+ 1 jev=0.24s struct=0.26 new=0.02 target=new(1.00) skip
+ 2 jev=0.27s struct=0.94 new=0.02 target=new(1.00) -> d1 flow draw=0.46s
+ 3 jev=0.26s struct=0.93 new=0.02 target=d1(0.70) -> d1 flow draw=0.48s
+ 4 jev=0.24s struct=0.94 new=0.03 target=d1(0.76) -> d1 flow draw=0.44s
+ 5 jev=0.25s struct=0.94 new=0.02 target=d1(0.82) -> d1 flow draw=0.48s
+ 6 jev=0.28s struct=0.94 new=0.02 target=d1(0.70) -> d1 flow draw=0.57s
+ 7 jev=0.27s struct=0.02 new=0.02 target=d1(0.96) skip
+ 8 jev=0.34s struct=0.92 new=0.02 target=d1(0.60) -> d1 flow draw=0.61s
+ 9 jev=0.25s struct=0.93 new=0.02 target=d1(0.84) -> d1 flow draw=0.62s
+10 jev=0.27s struct=0.88 new=0.02 target=d1(0.96) -> d1 flow draw=0.82s
+11 jev=0.25s struct=0.20 new=0.96 target=new(0.68) -> d2 state draw=0.28s
+12 jev=0.27s struct=0.95 new=0.06 target=d2(1.00) -> d2 state draw=0.46s
+13 jev=0.26s struct=0.92 new=0.03 target=d2(1.00) -> d2 state draw=0.35s
+14 jev=0.24s struct=0.97 new=0.03 target=d2(1.00) -> d2 state draw=0.46s
+15 jev=0.24s struct=0.97 new=0.03 target=d2(0.98) -> d2 state draw=0.36s
+16 jev=0.24s struct=0.05 new=0.04 target=d1(0.97) skip
+17 jev=0.25s struct=0.94 new=0.04 target=d1(0.41) -> d1 flow draw=0.85s
+18 jev=0.24s struct=0.89 new=0.03 target=d2(0.74) -> d2 state draw=0.53s
+19 jev=0.38s struct=0.93 new=0.03 target=d2(1.00) -> d2 state draw=0.43s
+20 jev=0.22s struct=0.02 new=0.03 target=d2(0.92) skip
+d1 flow 'Browser API Interaction' nodes=['browser', 'API Gateway', 'auth service', 'order service', 'Postgres', 'Kafka', 'charges the card', 'sends an email', 'Redis', 'rate limiter'] invented=[]
+d2 state 'Order Lifecycle' nodes=['draft', 'paid', 'shipped', 'refunded', 'delivered', 'expired'] invented=[]
+=== lines x2
+jev    n=40 median= 0.25s max= 0.41s
+draw   n=32 median= 0.47s max= 9.11s
+style  n= 0
+total  n=32 median= 0.73s max= 9.41s
+parse errors: 0/32
+=== openrouter/anthropic/claude-haiku-5.5
+--- run 1 (lines, openrouter/anthropic/claude-haiku-5.5)
+ 1 jev=0.30s struct=0.23 new=0.03 target=new(1.00) skip
+ 2 jev=0.22s struct=0.94 new=0.02 target=new(1.00) -> d1 sequence draw=11.76s
+ 3 jev=0.42s struct=0.93 new=0.03 target=d1(0.66) -> d1 sequence draw=1.54s
+ 4 jev=0.26s struct=0.95 new=0.03 target=d1(0.80) -> d1 sequence draw=2.31s
+ 5 jev=0.23s struct=0.94 new=0.02 target=d1(0.86) -> d1 sequence draw=1.89s
+ 6 jev=0.26s struct=0.94 new=0.02 target=d1(0.82) -> d1 sequence draw=2.24s
+ 7 jev=0.23s struct=0.02 new=0.02 target=d1(0.94) skip
+ 8 jev=0.25s struct=0.92 new=0.02 target=d1(0.72) -> d1 sequence draw=2.89s
+ 9 jev=0.24s struct=0.93 new=0.02 target=d1(0.82) -> d1 sequence draw=3.59s
+10 jev=0.28s struct=0.87 new=0.02 target=d1(0.96) -> d1 sequence draw=4.58s
+11 jev=0.27s struct=0.22 new=0.96 target=new(0.68) -> d2 state draw=1.32s
+12 jev=0.28s struct=0.95 new=0.06 target=d2(1.00) -> d2 state draw=1.87s
+13 jev=0.23s struct=0.91 new=0.03 target=d2(1.00) -> d2 state draw=1.14s
+14 jev=0.23s struct=0.97 new=0.03 target=d2(1.00) -> d2 state draw=1.86s
+15 jev=0.25s struct=0.97 new=0.03 target=d2(0.98) -> d2 state draw=1.40s
+16 jev=0.26s struct=0.05 new=0.04 target=d1(0.97) skip
+17 jev=0.22s struct=0.94 new=0.04 target=d1(0.34) LOW -> d1 sequence draw=3.97s
+18 jev=0.27s struct=0.88 new=0.03 target=d2(0.73) -> d2 state draw=1.92s
+19 jev=0.29s struct=0.93 new=0.02 target=d2(1.00) -> d2 state draw=2.65s
+20 jev=0.23s struct=0.02 new=0.02 target=d2(0.92) skip
+d1 sequence 'Browser to API Gateway' nodes=['Browser', 'API Gateway', 'Auth Service', 'Order Service', 'Postgres', 'Kafka', 'Billing Service', 'Notification Service', 'Redis', 'Rate Limiter'] invented=[]
+d2 state 'Order lifecycle' nodes=['Draft', 'Paid', 'Shipped', 'Refunded', 'Delivered', 'Expired'] invented=[]
+--- run 2 (lines, openrouter/anthropic/claude-haiku-5.5)
+ 1 jev=0.27s struct=0.22 new=0.02 target=new(1.00) skip
+ 2 jev=0.24s struct=0.94 new=0.02 target=new(1.00) -> d1 sequence draw=1.17s
+ 3 jev=0.28s struct=0.93 new=0.03 target=d1(0.54) -> d1 sequence draw=1.66s
+ 4 jev=0.23s struct=0.94 new=0.03 target=d1(0.80) -> d1 sequence draw=2.40s
+ 5 jev=0.29s struct=0.94 new=0.03 target=d1(0.90) -> d1 sequence draw=1.97s
+ 6 jev=0.22s struct=0.93 new=0.02 target=d1(0.78) -> d1 sequence draw=2.22s
+ 7 jev=0.24s struct=0.02 new=0.02 target=d1(0.96) skip
+ 8 jev=0.23s struct=0.93 new=0.02 target=d1(0.70) -> d1 sequence draw=4.02s
+ 9 jev=0.25s struct=0.93 new=0.02 target=d1(0.78) -> d1 sequence draw=3.31s
+10 jev=0.24s struct=0.87 new=0.02 target=d1(0.98) -> d1 sequence draw=3.30s
+11 jev=0.22s struct=0.22 new=0.96 target=new(0.70) -> d2 flow draw=1.48s
+12 jev=0.26s struct=0.95 new=0.06 target=d2(1.00) -> d2 flow draw=1.34s
+13 jev=0.25s struct=0.91 new=0.03 target=d2(1.00) -> d2 flow draw=1.54s
+14 jev=0.21s struct=0.97 new=0.03 target=d2(1.00) -> d2 flow draw=1.68s
+15 jev=0.23s struct=0.97 new=0.02 target=d2(0.98) -> d2 flow draw=1.74s
+16 jev=0.24s struct=0.05 new=0.04 target=d1(0.97) skip
+17 jev=0.24s struct=0.94 new=0.04 target=d1(0.43) -> d1 sequence draw=4.31s
+18 jev=0.23s struct=0.89 new=0.03 target=d2(0.71) -> d2 flow draw=1.77s
+19 jev=0.24s struct=0.92 new=0.03 target=d2(1.00) -> d2 flow draw=2.65s
+20 jev=0.23s struct=0.02 new=0.02 target=d2(0.94) skip
+d1 sequence 'Browser to API gateway' nodes=['Browser', 'API gateway', 'Rate limiter', 'Auth service', 'Redis', 'Order service', 'Postgres', 'Kafka', 'Billing service', 'Card', 'Notification service', 'Email'] invented=[]
+d2 flow 'Order Lifecycle' nodes=['Draft', 'Paid', 'Shipped', 'Refunded', 'Delivered', 'Expired'] invented=[]
+=== lines x2
+jev    n=40 median= 0.24s max= 0.42s
+draw   n=32 median= 1.95s max=11.76s
+style  n= 0
+total  n=32 median= 2.23s max=11.98s
+parse errors: 0/32
+=== openrouter/deepseek/deepseek-v4.1-flash
+--- run 1 (lines, openrouter/deepseek/deepseek-v4.1-flash)
+ 1 jev=0.29s struct=0.25 new=0.03 target=new(1.00) skip
+ 2 jev=0.22s struct=0.94 new=0.02 target=new(1.00) -> d1 flow draw=14.50s
+ 3 jev=0.29s struct=0.93 new=0.02 target=d1(0.50) -> d1 flow draw=3.76s
+ 4 jev=0.30s struct=0.95 new=0.03 target=d1(0.74) -> d1 flow draw=15.78s
+ 5 jev=0.28s struct=0.94 new=0.02 target=d1(0.82) -> d1 flow draw=3.88s
+ 6 jev=0.22s struct=0.93 new=0.02 target=d1(0.82) -> d1 flow draw=6.38s
+ 7 jev=0.35s struct=0.02 new=0.02 target=d1(0.96) skip
+ 8 jev=0.25s struct=0.92 new=0.02 target=d1(0.68) -> d1 flow draw=13.83s
+ 9 jev=0.27s struct=0.93 new=0.02 target=d1(0.76) -> d1 flow draw=16.73s
+10 jev=0.29s struct=0.87 new=0.02 target=d1(0.90) -> d1 flow draw=14.51s
+11 jev=0.41s struct=0.21 new=0.95 target=new(0.74) -> d2 state draw=2.53s
+12 jev=0.25s struct=0.94 new=0.06 target=d2(1.00) -> d2 state draw=3.83s
+13 jev=0.34s struct=0.92 new=0.03 target=d2(0.98) -> d2 state draw=3.23s
+14 jev=0.27s struct=0.97 new=0.03 target=d2(1.00) -> d2 state draw=2.05s
+15 jev=0.27s struct=0.97 new=0.03 target=d2(0.98) -> d2 state draw=2.76s
+16 jev=0.36s struct=0.05 new=0.04 target=d1(0.97) skip
+17 jev=0.29s struct=0.94 new=0.04 target=d2(0.62) -> d2 state draw=14.45s
+18 jev=0.30s struct=0.89 new=0.04 target=d2(0.80) -> d2 state draw=14.43s
+19 jev=0.28s struct=0.92 new=0.03 target=d2(1.00) -> d2 state draw=12.47s
+20 jev=0.31s struct=0.02 new=0.02 target=d2(0.98) skip
+d1 flow 'Browser Calls API Gateway' nodes=[] invented=[]
+d2 state 'Order lifecycle' nodes=[] invented=[]
+--- run 2 (lines, openrouter/deepseek/deepseek-v4.1-flash)
+ 1 jev=0.23s struct=0.21 new=0.02 target=new(1.00) skip
+ 2 jev=0.30s struct=0.94 new=0.02 target=new(1.00) -> d1 sequence draw=3.03s
+ 3 jev=0.23s struct=0.93 new=0.02 target=d1(0.64) -> d1 sequence draw=11.42s
+ 4 jev=0.24s struct=0.94 new=0.02 target=d1(0.82) -> d1 sequence draw=7.66s
+ 5 jev=0.32s struct=0.94 new=0.02 target=d1(0.86) -> d1 sequence draw=6.47s
+ 6 jev=0.33s struct=0.94 new=0.02 target=d1(0.90) -> d1 sequence draw=5.45s
+ 7 jev=0.32s struct=0.02 new=0.02 target=d1(0.98) skip
+ 8 jev=0.25s struct=0.92 new=0.02 target=d1(0.80) -> d1 sequence draw=15.47s
+ 9 jev=0.27s struct=0.93 new=0.02 target=d1(0.84) -> d1 sequence draw=15.93s
+10 jev=0.31s struct=0.87 new=0.02 target=d1(0.54) -> d1 sequence draw=14.87s
+11 jev=0.53s struct=0.18 new=0.96 target=new(0.68) -> d2 state draw=1.74s
+12 jev=0.27s struct=0.95 new=0.06 target=d2(1.00) -> d2 state draw=2.44s
+13 jev=0.27s struct=0.92 new=0.03 target=d2(0.98) -> d2 state draw=2.78s
+14 jev=0.26s struct=0.98 new=0.03 target=d2(1.00) -> d2 state draw=2.99s
+15 jev=0.25s struct=0.97 new=0.03 target=d2(0.98) -> d2 state draw=2.56s
+16 jev=0.26s struct=0.05 new=0.04 target=d1(0.98) skip
+17 jev=0.24s struct=0.94 new=0.04 target=d2(0.59) -> d2 state draw=13.29s
+18 jev=0.32s struct=0.89 new=0.03 target=d2(0.76) -> d2 state draw=14.52s
+19 jev=0.27s struct=0.93 new=0.03 target=d2(1.00) -> d2 state draw=13.79s
+20 jev=0.29s struct=0.02 new=0.02 target=d2(0.97) skip
+d1 sequence 'Browser calls API gateway' nodes=[] invented=[]
+d2 state 'Order lifecycle' nodes=[] invented=[]
+=== lines x2
+jev    n=40 median= 0.28s max= 0.53s
+draw   n=32 median= 7.06s max=16.73s
+style  n= 0
+total  n=32 median= 7.34s max=17.00s
+parse errors: 0/32

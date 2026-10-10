@@ -1,0 +1,8 @@
+talk       base_6594_3or_gemini_lite  change   failed checks in or_gemini_lite
+issue            18/23       23/23      +5   
+login            13/13       13/13      +0   
+order            17/17       12/17      -5   node paid; edge pending -> paid; edge pending -> cancelled; edge paid -> shipped; edge paid -> cancelled
+org              23/24       24/24      +1   
+backend          23/24       23/24      +0   labelled edges >= 50%
+hiring           19/31        6/31     -13   node post; node screen; node tech interview; node team interview; node rejection; node decide; node offer; node onboarding; path job description -> post; path post -> screen; path screen -> tech interview; path tech interview -> team interview; path tech interview -> rejection; path team interview -> decide; path decide -> offer; path offer -> onboarding; lane job description in manager; lane tech interview in manager; lane decide in manager; lane post in recruit; lane screen in recruit; lane rejection in recruit; lane team interview in engineer|team; lane offer in \bhr\b|human; lane onboarding in \bhr\b|human
+total              113     101/132     -12

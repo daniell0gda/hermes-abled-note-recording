@@ -1,0 +1,154 @@
+=== xai/grok-4-fast-non-reasoning
+--- run 1 (lines, xai/grok-4-fast-non-reasoning)
+ 1 jev=0.36s struct=0.24 new=0.03 target=new(1.00) skip
+ 2 jev=0.23s struct=0.94 new=0.02 target=new(1.00) -> d1 sequence draw=1.04s
+ 3 jev=0.28s struct=0.93 new=0.02 target=d1(0.62) -> d1 sequence draw=0.64s
+ 4 jev=0.24s struct=0.94 new=0.02 target=d1(0.78) -> d1 sequence draw=0.64s
+ 5 jev=0.27s struct=0.94 new=0.02 target=d1(0.88) -> d1 sequence draw=0.73s
+ 6 jev=0.28s struct=0.94 new=0.02 target=d1(0.88) -> d1 sequence draw=2.54s
+ 7 jev=0.22s struct=0.02 new=0.02 target=d1(0.96) skip
+ 8 jev=0.25s struct=0.92 new=0.02 target=d1(0.68) -> d1 sequence draw=0.92s
+ 9 jev=0.25s struct=0.92 new=0.02 target=d1(0.80) -> d1 sequence draw=0.99s
+10 jev=0.23s struct=0.87 new=0.02 target=d1(0.96) -> d1 sequence draw=1.06s
+11 jev=0.29s struct=0.21 new=0.96 target=new(0.68) -> d2 state draw=0.61s
+12 jev=0.22s struct=0.95 new=0.06 target=d2(1.00) -> d2 state draw=0.68s
+13 jev=0.28s struct=0.91 new=0.03 target=d2(1.00) -> d2 state draw=0.63s
+14 jev=0.25s struct=0.97 new=0.03 target=d2(1.00) -> d2 state draw=0.69s
+15 jev=0.23s struct=0.97 new=0.03 target=d2(0.97) -> d2 state draw=0.95s
+16 jev=0.23s struct=0.05 new=0.05 target=d1(0.97) skip
+17 jev=0.23s struct=0.94 new=0.04 target=d1(0.30) LOW -> d1 sequence draw=1.29s
+18 jev=0.25s struct=0.89 new=0.03 target=d2(0.73) -> d2 state draw=0.87s
+19 jev=0.27s struct=0.93 new=0.02 target=d2(1.00) -> d2 state draw=0.92s
+20 jev=0.25s struct=0.02 new=0.02 target=d2(0.94) skip
+d1 sequence 'Browser to API Gateway' nodes=['Browser', 'Api gateway', 'Auth service', 'Redis', 'Rate limiter', 'Order service', 'Postgres', 'Kafka', 'Billing service', 'Card', 'Notification service', 'Email'] invented=[]
+d2 state 'order lifecycle' nodes=['draft', 'paid', 'shipped', 'refunded', 'delivered', 'expired'] invented=[]
+=== lines x1
+jev    n=20 median= 0.25s max= 0.36s
+draw   n=16 median= 0.89s max= 2.54s
+style  n= 0
+total  n=16 median= 1.14s max= 2.82s
+parse errors: 0/16
+=== xai/grok-4-1-fast-non-reasoning
+--- run 1 (lines, xai/grok-4-1-fast-non-reasoning)
+ 1 jev=0.32s struct=0.20 new=0.03 target=new(1.00) skip
+ 2 jev=0.31s struct=0.94 new=0.02 target=new(1.00) -> d1 sequence draw=0.92s
+ 3 jev=0.25s struct=0.93 new=0.02 target=d1(0.62) -> d1 sequence draw=0.62s
+ 4 jev=0.28s struct=0.94 new=0.02 target=d1(0.82) -> d1 sequence draw=0.66s
+ 5 jev=0.25s struct=0.94 new=0.02 target=d1(0.88) -> d1 sequence draw=0.73s
+ 6 jev=0.28s struct=0.93 new=0.02 target=d1(0.86) -> d1 sequence draw=0.78s
+ 7 jev=0.26s struct=0.02 new=0.02 target=d1(0.96) skip
+ 8 jev=0.26s struct=0.93 new=0.02 target=d1(0.62) -> d1 sequence draw=0.83s
+ 9 jev=0.25s struct=0.93 new=0.02 target=d1(0.84) -> d1 sequence draw=1.04s
+10 jev=0.28s struct=0.87 new=0.02 target=d1(0.96) -> d1 sequence draw=1.05s
+11 jev=0.29s struct=0.20 new=0.96 target=new(0.66) -> d2 state draw=0.59s
+12 jev=0.26s struct=0.95 new=0.06 target=d2(1.00) -> d2 state draw=0.65s
+13 jev=0.29s struct=0.92 new=0.03 target=d2(1.00) -> d2 state draw=0.60s
+14 jev=0.26s struct=0.97 new=0.03 target=d2(1.00) -> d2 state draw=0.70s
+15 jev=0.59s struct=0.97 new=0.03 target=d2(0.97) -> d2 state draw=0.81s
+16 jev=0.27s struct=0.05 new=0.04 target=d1(0.97) skip
+17 jev=0.25s struct=0.94 new=0.04 target=d1(0.33) LOW -> d1 sequence draw=1.20s
+18 jev=0.27s struct=0.88 new=0.03 target=d2(0.72) -> d2 state draw=0.91s
+19 jev=0.25s struct=0.93 new=0.03 target=d2(1.00) -> d2 state draw=1.00s
+20 jev=0.28s struct=0.02 new=0.02 target=d2(0.94) skip
+d1 sequence 'Browser to API Gateway' nodes=['Browser', 'Api gateway', 'Auth service', 'Redis', 'Rate limiter', 'Order service', 'Postgres', 'Kafka', 'Billing service', 'Card', 'Notification service', 'Email'] invented=[]
+d2 state 'Order Lifecycle' nodes=['draft', 'paid', 'shipped', 'refunded', 'delivered', 'expired'] invented=[]
+=== lines x1
+jev    n=20 median= 0.27s max= 0.59s
+draw   n=16 median= 0.79s max= 1.20s
+style  n= 0
+total  n=16 median= 1.08s max= 1.45s
+parse errors: 0/16
+=== xai/grok-4.20-non-reasoning
+--- run 1 (lines, xai/grok-4.20-non-reasoning)
+ 1 jev=0.32s struct=0.23 new=0.02 target=new(1.00) skip
+ 2 jev=0.24s struct=0.94 new=0.02 target=new(1.00) -> d1 flow draw=1.20s
+ 3 jev=0.23s struct=0.93 new=0.02 target=d1(0.92) -> d1 flow draw=0.79s
+ 4 jev=0.26s struct=0.95 new=0.03 target=d1(0.94) -> d1 flow draw=0.85s
+ 5 jev=0.26s struct=0.93 new=0.02 target=d1(0.84) -> d1 flow draw=0.82s
+ 6 jev=0.27s struct=0.94 new=0.02 target=d1(0.80) -> d1 flow draw=0.96s
+ 7 jev=0.25s struct=0.02 new=0.02 target=d1(0.96) skip
+ 8 jev=0.24s struct=0.92 new=0.02 target=d1(0.68) -> d1 flow draw=1.16s PARSE-ERR ['billing_service -> "charges the card"']
+ 9 jev=0.25s struct=0.93 new=0.02 target=d1(0.82) -> d1 flow draw=1.12s PARSE-ERR ['billing_service -> "charges the card"', 'notification_service -> "sends an email"']
+10 jev=0.25s struct=0.88 new=0.02 target=d1(0.94) -> d1 flow draw=1.32s PARSE-ERR ['billing_service -> "charges the card"', 'notification_service -> "sends an email"']
+11 jev=0.26s struct=0.21 new=0.96 target=new(0.74) -> d2 state draw=0.56s
+12 jev=0.25s struct=0.95 new=0.06 target=d2(1.00) -> d2 state draw=0.66s
+13 jev=0.27s struct=0.92 new=0.03 target=d2(1.00) -> d2 state draw=0.68s
+14 jev=0.25s struct=0.97 new=0.04 target=d2(1.00) -> d2 state draw=0.86s
+15 jev=0.29s struct=0.97 new=0.02 target=d2(0.97) -> d2 state draw=0.91s
+16 jev=0.30s struct=0.05 new=0.04 target=d1(0.97) skip
+17 jev=0.30s struct=0.94 new=0.03 target=d1(0.46) -> d1 flow draw=1.25s PARSE-ERR ['billing_service -> "charges the card"', 'notification_service -> "sends an email"']
+18 jev=0.27s struct=0.89 new=0.03 target=d2(0.73) -> d2 state draw=1.18s
+19 jev=0.23s struct=0.93 new=0.03 target=d2(1.00) -> d2 state draw=1.26s PARSE-ERR ['group "final" "Final": delivered, refunded, expired']
+20 jev=0.23s struct=0.02 new=0.02 target=d2(0.92) skip
+ERROR: billing_service -> "charges the card"
+title "API Request Flow"
+browser -> api_gateway "calls"
+api_gateway -> auth_service "checks token"
+api_gateway -> order_service "forwards request"
+order_service -> postgres "writes order"
+order_service -> kafka "publishes order created event"
+kafka -> billing_service "order created event"
+billing_service -> "charges the card"
+
+ERROR: billing_service -> "charges the card"; notification_service -> "sends an email"
+title "API Request Flow"
+browser -> api_gateway "calls"
+api_gateway -> auth_service "checks token"
+api_gateway -> order_service "forwards request"
+order_service -> postgres "writes order"
+order_service -> kafka "publishes order created event"
+kafka -> billing_service "order created event"
+billing_service -> "charges the card"
+kafka -> notification_service "order created event"
+notification_service -> "sends an email"
+
+ERROR: billing_service -> "charges the card"; notification_service -> "sends an email"
+title "API Request Flow"
+browser -> api_gateway "calls"
+api_gateway -> auth_service "checks token"
+api_gateway -> order_service "forwards request"
+order_service -> postgres "writes order"
+order_service -> kafka "publishes order created event"
+kafka -> billing_service "order created event"
+billing_service -> "charges the card"
+kafka -> notification_service "order created event"
+notification_service -> "sends an email"
+auth_service -> redis "caches tokens"
+
+ERROR: billing_service -> "charges the card"; notification_service -> "sends an email"
+title "API Request Flow"
+browser -> api_gateway "calls"
+api_gateway -> auth_service "checks token"
+api_gateway -> rate_limiter
+rate_limiter -> order_service "forwards request"
+order_service -> postgres "writes order"
+order_service -> kafka "publishes order created event"
+kafka -> billing_service "order created event"
+billing_service -> "charges the card"
+kafka -> notification_service "order created event"
+notification_service -> "sends an email"
+auth_service -> redis "caches tokens"
+
+ERROR: group "final" "Final": delivered, refunded, expired
+title "Order Lifecycle"
+draft "Draft"
+paid "Paid"
+shipped "Shipped"
+refunded "Refunded"
+delivered "Delivered"
+expired "Expired"
+draft -> paid "pays"
+paid -> shipped
+paid -> refunded "payment reversed"
+shipped -> delivered "courier confirms"
+draft -> expired "expires after 24h"
+group "final" "Final": delivered, refunded, expired
+
+d1 flow 'API Request Flow' nodes=['Browser', 'Api gateway', 'Auth service', 'Rate limiter', 'Order service', 'Postgres', 'Kafka', 'Billing service', 'Notification service', 'Redis'] invented=[]
+d2 state 'Order Lifecycle' nodes=['Draft', 'Paid', 'Shipped', 'Refunded', 'Delivered', 'Expired'] invented=[]
+=== lines x1
+jev    n=20 median= 0.26s max= 0.32s
+draw   n=16 median= 0.93s max= 1.32s
+style  n= 0
+total  n=16 median= 1.21s max= 1.57s
+parse errors: 5/16
