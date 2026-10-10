@@ -34,6 +34,7 @@ providers:                    # env vars override these, e.g. GROQ_API_KEY, OPEN
   groq:   { api_key: "" }
   openai: { api_key: "" }
   xai:    { api_key: "", grok_auth: false }   # grok_auth: true = your Grok account ("Authorize Grok" in the tray) instead of a key
+  nous:   { api_key: "" }                     # Nous Portal; NOUS_API_KEY overrides this. Draw model: nous/<model>, e.g. nous/anthropic/claude-sonnet-4.6
 
 hermes:
   enabled: true

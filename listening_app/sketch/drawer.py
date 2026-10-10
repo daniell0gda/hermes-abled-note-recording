@@ -4,7 +4,7 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from listening_app.config import AppConfig, KeySource, Language
+from listening_app.config import AppConfig, KeySource, Language, provider_of
 from listening_app.sketch.diagrams import Destination, Diagram, DiagramKind, DiagramSet
 from listening_app.sketch.structure import Structure, StructureError
 from listening_app.transcriber import grok_access_token, grok_api_base, import_litellm
@@ -12,6 +12,9 @@ from listening_app.transcriber import grok_access_token, grok_api_base, import_l
 DRAW_TIMEOUT_S = 15.0
 MAX_TOKENS = 1500
 MAX_NODES = 16
+NOUS_PROVIDER = "nous"
+NOUS_API_BASE = "https://inference-api.nousresearch.com/v1"
+LITELLM_OPENAI_ROUTE = "openai"
 
 KIND_HINTS = {
     DiagramKind.FLOW: "Nodes are the components, systems, people or steps that do the work; edges are calls, handoffs "
@@ -178,8 +181,14 @@ def litellm_completion(model: str, messages: list[dict[str, str]], credentials: 
         options["api_key"] = credentials.api_key
     if credentials.api_base:
         options["api_base"] = credentials.api_base
-    response = litellm.completion(model=model, messages=messages, **options)
+    response = litellm.completion(model=_litellm_model(model), messages=messages, **options)
     return str(response.choices[0].message.content or "")
+
+
+def _litellm_model(model: str) -> str:
+    if provider_of(model) != NOUS_PROVIDER:
+        return model
+    return f"{LITELLM_OPENAI_ROUTE}/{model.split('/', 1)[1]}"
 
 
 def credentials_provider(config: AppConfig) -> Callable[[], Credentials]:
@@ -187,7 +196,8 @@ def credentials_provider(config: AppConfig) -> Callable[[], Credentials]:
     key = config.draw_key()
     if key.source is KeySource.GROK_AUTH:
         return lambda: Credentials(grok_access_token(), grok_api_base())
-    return lambda: Credentials(key.value)
+    api_base = NOUS_API_BASE if provider_of(config.sketch.draw_model) == NOUS_PROVIDER else None
+    return lambda: Credentials(key.value, api_base)
 
 
 class Drawer:
