@@ -66,7 +66,8 @@ class LiveSketch:
         self._stopped = False
         self._window_events: dict[str, Callable[[WindowEvent], None]] = {
             "pointer": self._pointer_moved, "leave": self._pointer_left, "boxes": self._boxes_drawn,
-            "activate": self._tab_chosen, "select": self._selected, "closed": self._window_closed,
+            "activate": self._tab_chosen, "select": self._selected, "close": self._tab_closed,
+            "closed": self._window_closed,
             "microphone": self._microphone_toggled, "copy-path": self._copy_path,
         }
 
@@ -237,6 +238,9 @@ class LiveSketch:
 
     def _selected(self, event: WindowEvent) -> None:
         self._pipeline.select(int(event["number"]), [str(element) for element in event["ids"]])
+
+    def _tab_closed(self, event: WindowEvent) -> None:
+        self._pipeline.close(int(event["number"]))
 
     def _window_closed(self, event: WindowEvent) -> None:
         self._on_closed()

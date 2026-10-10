@@ -2,6 +2,7 @@
  * Live sketch window: tabs per diagram, rendering, and the pointer / click / tab / mic / copy events sent back to Python
  * through `window.pywebview.api.event`. Python calls `SketchApp.receive(message)`.
  * Ctrl + mouse wheel zooms at the mouse, dragging moves the view, Ctrl+0 resets it; a new tab starts unzoomed.
+ * A middle-click on a tab closes that diagram.
  */
 (function (global) {
   "use strict";
@@ -13,6 +14,7 @@
   const MAX_ZOOM = 8;
   const ZOOM_PER_WHEEL_DELTA = 0.0015;
   const DRAG_THRESHOLD_PX = 4;
+  const MIDDLE_BUTTON = 1;
   const svg = document.getElementById("sketch");
   const tabs = document.getElementById("tabs");
   const title = document.getElementById("title");
@@ -55,9 +57,18 @@
       number.className = "sk-tab-number";
       number.textContent = String(view.number);
       tab.append(number, view.title || "New diagram");
+      tab.title = "Middle-click to close";
       tab.addEventListener("click", () => activate(view.number));
+      tab.addEventListener("mousedown", preventMiddleButtonScroll);
+      tab.addEventListener("auxclick", (event) => {
+        if (event.button === MIDDLE_BUTTON) send({ type: "close", number: view.number });
+      });
       return tab;
     }));
+  }
+
+  function preventMiddleButtonScroll(event) {
+    if (event.button === MIDDLE_BUTTON) event.preventDefault();
   }
 
   function draw() {

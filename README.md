@@ -116,7 +116,8 @@ states and how they connect. Switch it on with **Ctrl+Alt+D** (`sketch.hotkey`) 
   Jev picks shapes (service, database, queue, cache, actor, ...) for the new elements. Updates appear about
   1–2 s after you finish a sentence. Without a TypeSafe key the drawing model also routes, which is slower.
 - "Let's start a new diagram for ..." opens a new tab; "back to diagram 1" or "back to the login flow" returns
-  to one. Clicking a tab does the same.
+  to one. Clicking a tab does the same. A middle-click on a tab closes that diagram: it leaves the window, new
+  lines no longer go to it, and its saved file stays.
 - **Pointing:** rest the mouse on an element for 2 s and it is lightly highlighted; "this one" or "here" in what
   you say then means that element. **Selecting:** click elements to select them (solid outline), click empty
   space to clear; the drawing model sees the selection.
