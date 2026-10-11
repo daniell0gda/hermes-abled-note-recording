@@ -20,6 +20,7 @@ from listening_app.sketch.diagrams import (
     EdgeStyle,
     NodeStyle,
     Overview,
+    Styles,
 )
 from listening_app.sketch.jev_client import JevError, Routing
 from listening_app.sketch.structure import Structure, parse_structure
@@ -45,7 +46,7 @@ class CleanArtist(Protocol):
 class ChunkJudge(Protocol):
     def route(self, segment: str, previous: list[str], overview: Overview) -> Routing: ...
 
-    def style(self, diagram: Diagram, changes: Changes) -> tuple[dict[str, NodeStyle], dict[str, EdgeStyle]]: ...
+    def style(self, diagram: Diagram, changes: Changes) -> Styles: ...
 
 
 @dataclass(frozen=True)
@@ -57,6 +58,7 @@ class BucketBResult:
     structure: Structure
     node_styles: dict[str, NodeStyle]
     edge_styles: dict[str, EdgeStyle]
+    focus: tuple[str, ...]
     generation: int
     clean_len: int
     chunk_count: int
@@ -149,6 +151,7 @@ def rebuild_from_clean(
         structure=structure,
         node_styles={node.id: built.node_style(node.id) for node in structure.nodes},
         edge_styles={edge.id: built.edge_style(edge.id) for edge in structure.edges},
+        focus=built.focus,
         generation=generation,
         clean_len=len(clean),
         chunk_count=len(chunks),

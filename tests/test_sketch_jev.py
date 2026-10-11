@@ -14,7 +14,7 @@ from listening_app.sketch.diagrams import (
     NodeStyle,
     Shape,
 )
-from listening_app.sketch.jev_client import JEV_URL, JevClient, JevError, Routing
+from listening_app.sketch.jev_client import JEV_URL, NO_FOCUS, JevClient, JevError, Routing
 from listening_app.sketch.structure import parse_structure
 
 
@@ -120,28 +120,70 @@ def test_style_asks_shape_and_focus_per_new_node_and_style_per_new_edge() -> Non
     diagram = Diagram(1, DiagramKind.FLOW, transcript=["Orders are written to Postgres."])
     diagram.update(parse_structure('orders "Order service"\npg "Postgres"\norders -> pg "writes"'))
     fake = FakeJev({"shape:pg": {"type": "choice", "choice": "database", "confidence": 1.0, "probabilities": {}},
-                    "focal:pg": {"type": "noul", "noul": 0.82},
+                    "focus": {"type": "choice", "choice": "pg", "confidence": 0.82, "probabilities": {}},
                     "edge:orders->pg": {"type": "choice", "choice": "data", "confidence": 0.9, "probabilities": {}}})
 
-    nodes, edges = client(fake).style(diagram, Changes(("pg",), ("orders->pg",)))
+    nodes, edges, focus = client(fake).style(diagram, Changes(("pg",), ("orders->pg",)))
 
     body = fake.body()
-    assert set(body["questions"]) == {"shape:pg", "focal:pg", "edge:orders->pg"}
+    assert set(body["questions"]) == {"shape:pg", "focus", "edge:orders->pg"}
     assert body["state"]["transcript"] == ["Orders are written to Postgres."]
     assert body["state"]["nodes"] == [{"id": "orders", "label": "Order service"}, {"id": "pg", "label": "Postgres"}]
     assert body["state"]["edges"] == [{"source": "orders", "target": "pg", "label": "writes"}]
     assert "`edges[0]`" in body["questions"]["edge:orders->pg"]["instructions"]
     assert set(body["questions"]["shape:pg"]["criteria"]) == {shape.value for shape in Shape}
     assert set(body["questions"]["edge:orders->pg"]["criteria"]) == {style.value for style in EdgeStyle}
-    assert nodes == {"pg": NodeStyle(Shape.DATABASE, focal=True)}
+    assert nodes == {"pg": NodeStyle(Shape.DATABASE)}
     assert edges == {"orders->pg": EdgeStyle.DATA}
+    assert focus == ("pg",)
 
 
 def test_nothing_to_style_needs_no_request() -> None:
     fake = FakeJev({})
 
-    assert client(fake).style(Diagram(1, DiagramKind.FLOW), Changes((), ())) == ({}, {})
+    assert client(fake).style(Diagram(1, DiagramKind.FLOW), Changes((), ())) == ({}, {}, None)
     assert fake.requests == []
+
+
+@pytest.mark.parametrize(("kind", "candidates"), [
+    (DiagramKind.FLOW, {"browser", "server"}),
+    (DiagramKind.SEQUENCE, {"browser->server", "server->browser"}),
+    (DiagramKind.SWIMLANE, {"browser", "server", "browser->server", "server->browser"}),
+])
+def test_the_focus_question_offers_the_elements_that_may_carry_the_accent(kind: DiagramKind,
+                                                                          candidates: set[str]) -> None:
+    diagram = Diagram(1, kind)
+    diagram.update(parse_structure('browser -> server "request"\nserver -> browser "response"'))
+    fake = FakeJev({"edge:browser->server": {"type": "choice", "choice": "sync", "confidence": 1.0},
+                    "focus": {"type": "choice", "choice": NO_FOCUS, "confidence": 0.9}})
+
+    client(fake).style(diagram, Changes((), ("browser->server",)))
+
+    assert set(fake.body()["questions"]["focus"]["criteria"]) == candidates | {NO_FOCUS}
+
+
+@pytest.mark.parametrize(("answer", "focus"), [
+    ({"choice": "pg", "confidence": 0.6}, ("pg",)),
+    ({"choice": NO_FOCUS, "confidence": 0.6}, ()),
+    ({"choice": "pg", "confidence": 0.2}, None),
+])
+def test_an_unsure_focus_answer_keeps_the_current_focus(answer: dict[str, object],
+                                                        focus: tuple[str, ...] | None) -> None:
+    diagram = Diagram(1, DiagramKind.FLOW)
+    diagram.update(parse_structure('pg "Postgres"'))
+    fake = FakeJev({"shape:pg": {"type": "choice", "choice": "database", "confidence": 1.0},
+                    "focus": {"type": "choice", **answer}})
+
+    assert client(fake).style(diagram, Changes(("pg",), ()))[2] == focus
+
+
+def test_a_dependency_diagram_gets_no_focus_question() -> None:
+    diagram = Diagram(1, DiagramKind.DEPENDENCY)
+    diagram.update(parse_structure("api -> core"))
+    fake = FakeJev({"edge:api->core": {"type": "choice", "choice": "dependency", "confidence": 1.0}})
+
+    assert client(fake).style(diagram, Changes((), ("api->core",))) == ({}, {"api->core": EdgeStyle.DEPENDENCY}, None)
+    assert "focus" not in fake.body()["questions"]
 
 
 @pytest.mark.parametrize("status", [401, 422, 429, 500, 529])

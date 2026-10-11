@@ -14,6 +14,7 @@ from listening_app.sketch.diagrams import (
     NodeStyle,
     Overview,
     Shape,
+    Styles,
 )
 
 JEV_URL = "https://api.typesafe.ai/v1/systemone"
@@ -22,8 +23,9 @@ YES = 0.5
 ROUTE_CONFIDENCE = 0.4
 UNREQUESTED_NEW_CONFIDENCE = 0.8
 SWITCH_CONFIDENCE = 0.6
-FOCAL_PROBABILITY = 0.7
+FOCUS_CONFIDENCE = 0.3
 NEW_TARGET = "new"
+NO_FOCUS = "<none>"
 
 KINDS = {
     DiagramKind.FLOW: "How components, systems or steps connect: system architecture, data flow, pipelines, or a "
@@ -56,6 +58,16 @@ EDGE_STYLES = {
     EdgeStyle.DATA: "Reading or writing data to a store",
     EdgeStyle.TRANSITION: "A transition from one state to another",
     EdgeStyle.DEPENDENCY: "A dependency, ownership or structural relationship",
+}
+FOCUS_HINTS = {
+    DiagramKind.FLOW: "the main integration point, the main data store, or the key decision",
+    DiagramKind.SEQUENCE: "the message that delivers the main result, for example the success response",
+    DiagramKind.STATE: "the state the reader must notice: the successful end state or the error state",
+    DiagramKind.TREE: "the root, or one critical leaf the speaker stresses",
+    DiagramKind.ER: "the central entity of the model",
+    DiagramKind.SWIMLANE: "the step or the handoff between lanes that matters most, for example the final decision",
+    DiagramKind.NESTED: "the innermost scope the speaker talks about",
+    DiagramKind.LAYERS: "the one layer under discussion, for example the bottleneck",
 }
 
 _ROUTING_QUESTIONS: dict[str, dict[str, Any]] = {
@@ -139,19 +151,24 @@ class JevClient:
         except (KeyError, TypeError, ValueError) as exc:
             raise JevError(f"unexpected routing answer: {exc!r}") from exc
 
-    def style(self, diagram: Diagram, changes: Changes) -> tuple[dict[str, NodeStyle], dict[str, EdgeStyle]]:
-        """Shape and emphasis of each new node, style of each new edge, in one request."""
+    def style(self, diagram: Diagram, changes: Changes) -> Styles:
+        """Shape of each new node, style of each new edge and the diagram's focus, in one request.
+
+        The focus is None (keep the current one) when Jev is not sure or the diagram kind has no focus question.
+        """
         if not changes.nodes and not changes.edges:
-            return {}, {}
-        answers = self._ask(_style_state(diagram), _style_questions(diagram, changes))
+            return {}, {}, None
+        questions = _style_questions(diagram, changes)
+        if diagram.kind in FOCUS_HINTS:
+            questions["focus"] = _focus_question(diagram)
+        answers = self._ask(_style_state(diagram), questions)
         try:
-            nodes = {node_id: NodeStyle(Shape(answers[f"shape:{node_id}"]["choice"]),
-                                        float(answers[f"focal:{node_id}"]["noul"]) >= FOCAL_PROBABILITY)
-                     for node_id in changes.nodes}
+            nodes = {node_id: NodeStyle(Shape(answers[f"shape:{node_id}"]["choice"])) for node_id in changes.nodes}
             edges = {edge_id: EdgeStyle(answers[f"edge:{edge_id}"]["choice"]) for edge_id in changes.edges}
+            focus = _focus(answers["focus"]) if "focus" in questions else None
         except (KeyError, TypeError, ValueError) as exc:
             raise JevError(f"unexpected style answer: {exc!r}") from exc
-        return nodes, edges
+        return nodes, edges, focus
 
     def _ask(self, state: dict[str, Any], questions: dict[str, Any]) -> dict[str, Any]:
         try:
@@ -179,12 +196,6 @@ def _style_questions(diagram: Diagram, changes: Changes) -> dict[str, Any]:
         questions[f"shape:{node_id}"] = {
             "type": "choice", "criteria": {shape.value: text for shape, text in SHAPES.items()},
             "instructions": f'What kind of element is the node `{node_id}` ("{label}") in this diagram?'}
-        questions[f"focal:{node_id}"] = {
-            "type": "noul",
-            "instructions": f'Does the speaker in `transcript` stress the node `{node_id}` ("{label}") '
-                            "as the central or most important element of the diagram?",
-            "criteria": {"true": "Explicitly stressed as central or most important",
-                         "false": "One element among others"}}
     edge_ids = [edge.id for edge in structure.edges]
     for edge_id in changes.edges:
         index = edge_ids.index(edge_id)
@@ -194,4 +205,33 @@ def _style_questions(diagram: Diagram, changes: Changes) -> dict[str, Any]:
             "instructions": f"What kind of connection is `edges[{index}]` from `{edge.source}` to `{edge.target}`"
                             + (f' ("{edge.label}")' if edge.label else "") + "?"}
     return questions
+
+
+def _focus_question(diagram: Diagram) -> dict[str, Any]:
+    kind = diagram.kind
+    return {"type": "choice", "criteria": {**_focus_candidates(diagram), NO_FOCUS: "No single element stands out"},
+            "instructions": f"Which single element of this {kind.value} diagram should the reader look at first? "
+                            f"Pick {FOCUS_HINTS[kind]}."}
+
+
+def _focus_candidates(diagram: Diagram) -> dict[str, str]:
+    """The elements that may carry the accent: messages in a sequence, nodes and handoffs in a swimlane, else nodes."""
+    structure = diagram.structure
+    labels = {node.id: node.label for node in structure.nodes}
+    noun = "message" if diagram.kind is DiagramKind.SEQUENCE else "connection"
+    nodes = {node.id: f'The node "{node.label}"' for node in structure.nodes}
+    edges = {edge.id: f'The {noun} from "{labels[edge.source]}" to "{labels[edge.target]}"'
+                      + (f' ("{edge.label}")' if edge.label else "") for edge in structure.edges}
+    if diagram.kind is DiagramKind.SEQUENCE:
+        return edges
+    if diagram.kind is DiagramKind.SWIMLANE:
+        return {**nodes, **edges}
+    return nodes
+
+
+def _focus(answer: dict[str, Any]) -> tuple[str, ...] | None:
+    if float(answer["confidence"]) < FOCUS_CONFIDENCE:
+        return None
+    choice: str = answer["choice"]
+    return () if choice == NO_FOCUS else (choice,)
 

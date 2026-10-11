@@ -6,7 +6,7 @@ from typing import Any
 
 from listening_app.sketch.structure import Structure
 
-MAX_FOCAL_NODES = 2
+MAX_FOCAL = 2
 
 
 class DiagramKind(StrEnum):
@@ -45,7 +45,9 @@ class EdgeStyle(StrEnum):
 @dataclass(frozen=True)
 class NodeStyle:
     shape: Shape
-    focal: bool = False
+
+
+Styles = tuple[dict[str, NodeStyle], dict[str, EdgeStyle], tuple[str, ...] | None]
 
 
 @dataclass(frozen=True)
@@ -91,6 +93,31 @@ def _default_styles(kind: DiagramKind) -> tuple[NodeStyle, EdgeStyle]:
     return NodeStyle(Shape.SERVICE), EdgeStyle.SYNC
 
 
+def _cycle_edges(structure: Structure) -> list[str]:
+    """Ids of the edges that close a cycle, found by a depth-first walk in node order."""
+    targets: dict[str, list[tuple[str, str]]] = {}
+    for edge in structure.edges:
+        targets.setdefault(edge.source, []).append((edge.id, edge.target))
+    walking: set[str] = set()
+    done: set[str] = set()
+    closing: list[str] = []
+
+    def walk(node_id: str) -> None:
+        walking.add(node_id)
+        for edge_id, target in targets.get(node_id, []):
+            if target in walking:
+                closing.append(edge_id)
+            elif target not in done:
+                walk(target)
+        walking.discard(node_id)
+        done.add(node_id)
+
+    for node in structure.nodes:
+        if node.id not in done:
+            walk(node.id)
+    return closing
+
+
 @dataclass
 class Diagram:
     number: int
@@ -102,6 +129,7 @@ class Diagram:
     selection: set[str] = field(default_factory=set)
     _node_styles: dict[str, NodeStyle] = field(default_factory=dict)
     _edge_styles: dict[str, EdgeStyle] = field(default_factory=dict)
+    _focus: tuple[str, ...] = ()
 
     @property
     def title(self) -> str:
@@ -128,9 +156,23 @@ class Diagram:
         return replace(self, transcript=list(self.transcript), selection=set(self.selection),
                        _node_styles=dict(self._node_styles), _edge_styles=dict(self._edge_styles))
 
-    def set_styles(self, nodes: dict[str, NodeStyle], edges: dict[str, EdgeStyle]) -> None:
+    def set_styles(self, nodes: dict[str, NodeStyle], edges: dict[str, EdgeStyle],
+                   focus: tuple[str, ...] | None = None) -> None:
+        """Store element styles by id. `focus` replaces the accented elements; None keeps them."""
         self._node_styles.update(nodes)
         self._edge_styles.update(edges)
+        if focus is not None:
+            self._focus = focus
+
+    @property
+    def focus(self) -> tuple[str, ...]:
+        return self._focus
+
+    def _focal_ids(self) -> set[str]:
+        if self.kind is DiagramKind.DEPENDENCY:
+            return set(_cycle_edges(self.structure)[:MAX_FOCAL])
+        existing = self.structure.element_ids()
+        return set([element for element in self._focus if element in existing][:MAX_FOCAL])
 
     def node_style(self, node_id: str) -> NodeStyle:
         return self._node_styles.get(node_id, _default_styles(self.kind)[0])
@@ -155,7 +197,7 @@ class Diagram:
 
     def view(self, pointed: str | None = None) -> dict[str, Any]:
         """Everything the renderer needs, JSON-ready."""
-        focal = [node.id for node in self.structure.nodes if self.node_style(node.id).focal][:MAX_FOCAL_NODES]
+        focal = self._focal_ids()
         return {
             "number": self.number,
             "title": self.title,
@@ -163,7 +205,8 @@ class Diagram:
             "nodes": [{"id": node.id, "label": node.label, "shape": self.node_style(node.id).shape.value,
                        "focal": node.id in focal} for node in self.structure.nodes],
             "edges": [{"id": edge.id, "source": edge.source, "target": edge.target, "label": edge.label,
-                       "style": self.edge_style(edge.id).value} for edge in self.structure.edges],
+                       "style": self.edge_style(edge.id).value, "focal": edge.id in focal}
+                      for edge in self.structure.edges],
             "groups": [{"id": group.id, "label": group.label, "members": list(group.members)}
                        for group in self.structure.groups],
             "selected": sorted(self.selection),

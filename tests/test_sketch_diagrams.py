@@ -88,7 +88,7 @@ def test_selection_drops_elements_that_were_removed() -> None:
 def test_view_carries_styles_selection_and_the_pointed_element() -> None:
     diagram = Diagram(1, DiagramKind.FLOW)
     diagram.update(FIRST)
-    diagram.set_styles({"redis": NodeStyle(Shape.CACHE, focal=True)}, {})
+    diagram.set_styles({"redis": NodeStyle(Shape.CACHE)}, {}, ("redis",))
     diagram.select(["auth"])
 
     view = diagram.view(pointed="redis")
@@ -97,17 +97,60 @@ def test_view_carries_styles_selection_and_the_pointed_element() -> None:
         "number": 1, "title": "Request path", "kind": "flow",
         "nodes": [{"id": "auth", "label": "Auth service", "shape": "service", "focal": False},
                   {"id": "redis", "label": "Redis", "shape": "cache", "focal": True}],
-        "edges": [{"id": "auth->redis", "source": "auth", "target": "redis", "label": "caches tokens", "style": "sync"}],
+        "edges": [{"id": "auth->redis", "source": "auth", "target": "redis", "label": "caches tokens", "style": "sync",
+                   "focal": False}],
         "groups": [], "selected": ["auth"], "pointed": "redis",
     }
 
 
-def test_view_shows_at_most_two_focal_nodes() -> None:
+def test_view_shows_at_most_two_focal_elements() -> None:
     diagram = Diagram(1, DiagramKind.FLOW)
     diagram.update(parse_structure('a "A"\nb "B"\nc "C"'))
-    diagram.set_styles({node: NodeStyle(Shape.SERVICE, focal=True) for node in "abc"}, {})
+    diagram.set_styles({}, {}, ("a", "b", "c"))
 
     assert [node["focal"] for node in diagram.view()["nodes"]] == [True, True, False]
+
+
+def test_an_edge_can_be_the_focus() -> None:
+    diagram = Diagram(1, DiagramKind.SEQUENCE)
+    diagram.update(FIRST)
+    diagram.set_styles({}, {}, ("auth->redis",))
+
+    view = diagram.view()
+
+    assert [edge["focal"] for edge in view["edges"]] == [True]
+    assert [node["focal"] for node in view["nodes"]] == [False, False]
+
+
+def test_styles_without_a_focus_keep_the_current_one() -> None:
+    diagram = Diagram(1, DiagramKind.FLOW)
+    diagram.update(FIRST)
+    diagram.set_styles({}, {}, ("redis",))
+
+    diagram.set_styles({"auth": NodeStyle(Shape.SERVICE)}, {}, None)
+
+    assert diagram.focus == ("redis",)
+
+
+def test_a_removed_element_loses_the_focus() -> None:
+    diagram = Diagram(1, DiagramKind.FLOW)
+    diagram.update(FIRST)
+    diagram.set_styles({}, {}, ("redis",))
+
+    diagram.update(parse_structure('auth "Auth service"'))
+
+    assert [node["focal"] for node in diagram.view()["nodes"]] == [False]
+
+
+def test_a_dependency_diagram_accents_the_edge_that_closes_a_cycle() -> None:
+    diagram = Diagram(1, DiagramKind.DEPENDENCY)
+    diagram.update(parse_structure("api -> core\ncore -> db\ndb -> core\napi -> db"))
+    diagram.set_styles({}, {}, ("api",))
+
+    view = diagram.view()
+
+    assert [edge["id"] for edge in view["edges"] if edge["focal"]] == ["db->core"]
+    assert not any(node["focal"] for node in view["nodes"])
 
 
 def test_routing_summary_lists_number_title_and_node_labels() -> None:

@@ -10,6 +10,7 @@ from listening_app.sketch.diagrams import (
     NodeStyle,
     Overview,
     Shape,
+    Styles,
 )
 from listening_app.sketch.drawer import Revision, RoutedDrawing, SpokenLine
 from listening_app.sketch.jev_client import JevError, Routing
@@ -46,9 +47,9 @@ class FakeJudge:
             return self.live.pop(0)
         return self.chunk
 
-    def style(self, diagram: Diagram, changes: Changes) -> tuple[dict[str, NodeStyle], dict[str, EdgeStyle]]:
+    def style(self, diagram: Diagram, changes: Changes) -> Styles:
         return ({node: NodeStyle(Shape.EXTERNAL if node == "github" else Shape.SERVICE) for node in changes.nodes},
-                {edge: EdgeStyle.SYNC for edge in changes.edges})
+                {edge: EdgeStyle.SYNC for edge in changes.edges}, ("github",))
 
 
 class FakeDrawer:
@@ -144,6 +145,7 @@ def test_rebuild_draws_all_clean_chunks_at_once_and_ignores_the_messy_live_graph
         "create", "github", "start", "leader", "implementer", "checker", "done"]
     assert [group.id for group in result.structure.groups] == ["team"]
     assert result.node_styles["github"].shape is Shape.EXTERNAL
+    assert result.focus == ("github",)
     assert (result.chunk_count, result.drawn_chunks) == (4, 4)
     assert judge.route_calls[0] == CLEAN  # the kind is judged on the whole clean text first
 
@@ -224,6 +226,7 @@ def test_bucket_b_soft_swaps_the_live_view_without_losing_the_transcript() -> No
     assert view(recorder)["kind"] == "swimlane"
     assert "team_box" not in node_ids(recorder)
     assert "done" in node_ids(recorder)
+    assert [node["id"] for node in view(recorder)["nodes"] if node["focal"]] == ["github"]
     assert recorder.states[-1].updated == 1
     assert drawer.clean_calls == [["create issue skill to github uh", "team box implementer"]]
 

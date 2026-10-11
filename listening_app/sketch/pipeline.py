@@ -20,9 +20,8 @@ from listening_app.sketch.diagrams import (
     Diagram,
     DiagramKind,
     DiagramSet,
-    EdgeStyle,
-    NodeStyle,
     Overview,
+    Styles,
 )
 from listening_app.sketch.drawer import Revision, RoutedDrawing, SpokenLine
 from listening_app.sketch.jev_client import JevError, Routing
@@ -40,9 +39,6 @@ DEFAULT_RETROSPECT_MAX_NODES = 9
 DEFAULT_BUCKET_B_MIN_NEW_LINES = 2
 DEFAULT_BUCKET_B_DEBOUNCE_S = 2.0
 DEFAULT_BUCKET_B_MAX_WAIT_S = 10.0
-
-Styles = tuple[dict[str, NodeStyle], dict[str, EdgeStyle]]
-
 
 class Judge(Protocol):
     def route(self, segment: str, previous: list[str], overview: Overview) -> Routing: ...
@@ -325,7 +321,7 @@ class SketchPipeline:
             before_nodes, before_edges = len(live.structure.nodes), len(live.structure.edges)
             live.set_kind(result.kind)
             live.update(result.structure)
-            live.set_styles(result.node_styles, result.edge_styles)
+            live.set_styles(result.node_styles, result.edge_styles, result.focus)
             self._b_swaps += 1
             self._b_lines_done[live.number] = max(self._b_lines_done.get(live.number, 0), lines_used)
             state = self._state(live.number)
@@ -504,12 +500,12 @@ class SketchPipeline:
         with self._changed:
             judge = self._judge
         if judge is None:
-            return {}, {}
+            return {}, {}, None
         try:
             return judge.style(diagram, changes)
         except JevError as exc:
             self._jev_failed(str(exc))
-            return {}, {}
+            return {}, {}, None
 
     def _retry(self, batch: list[_Pending], number: int | None, reason: str) -> None:
         retry = [replace(pending, attempts=pending.attempts + 1) for pending in batch

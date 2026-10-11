@@ -44,9 +44,14 @@ While you talk, what you describe is drawn as a diagram, so explaining something
 |---|---|
 | Node shape | service · database · queue/topic · cache · user/actor · external system · client/UI · state · decision · note |
 | Edge style | sync call · async event · data read/write · transition · dependency |
-| Emphasis | focal (Noul) |
+| Focus | one choice per diagram: the element the reader looks at first, or none |
 
 State is the element plus the diagram's transcript. Choices are stored per element id, so styles never flicker.
+
+The focus question uses the diagram-design rule for the kind: for example the success or error end state of a
+state diagram, the root of a tree, the main success message of a sequence (an edge). A swimlane offers nodes and
+handoff edges. A dependency diagram gets no question: code accents the edge that closes a cycle. An answer under
+`FOCUS_CONFIDENCE` keeps the current focus, so the accent does not jump between updates.
 
 ## Per-segment steps
 

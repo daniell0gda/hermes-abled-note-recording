@@ -13,6 +13,7 @@ from listening_app.sketch.diagrams import (
     NodeStyle,
     Overview,
     Shape,
+    Styles,
 )
 from listening_app.sketch.drawer import Revision, RoutedDrawing, SpokenLine
 from listening_app.sketch.jev_client import JevError, Routing
@@ -40,12 +41,12 @@ class FakeJudge:
             raise JevError("503 overloaded")
         return self.routings.pop(0) if len(self.routings) > 1 else self.routings[0]
 
-    def style(self, diagram: Diagram, changes: Changes) -> tuple[dict[str, NodeStyle], dict[str, EdgeStyle]]:
+    def style(self, diagram: Diagram, changes: Changes) -> Styles:
         self.style_calls.append(changes)
         if self.fail_style:
             raise JevError("timeout")
         return ({node: NodeStyle(Shape.CACHE if node == "redis" else Shape.SERVICE) for node in changes.nodes},
-                {edge: EdgeStyle.DATA for edge in changes.edges})
+                {edge: EdgeStyle.DATA for edge in changes.edges}, None)
 
 
 class FakeDrawer:
