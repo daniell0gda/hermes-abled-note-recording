@@ -313,7 +313,10 @@ def _spoken(lines: list[SpokenLine], structure: Structure) -> list[str]:
 
 def _describe(element_id: str, structure: Structure) -> str:
     node = structure.node(element_id)
-    return f"{node.label} ({element_id})" if node is not None else element_id
+    if node is not None:
+        return f"{node.label} ({element_id})"
+    group = structure.group(element_id)
+    return f"{group.label} (group {element_id})" if group is not None else element_id
 
 
 def _diagram_listing(diagrams: DiagramSet) -> list[str]:

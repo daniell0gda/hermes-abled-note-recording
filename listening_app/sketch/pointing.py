@@ -10,12 +10,18 @@ COVERAGE_TOLERANCE_S = 0.05
 
 @dataclass(frozen=True)
 class Box:
-    """An element's bounding box in window pixels."""
+    """An element's bounding box in window pixels. A section (a group's zone, ring, lane or layer) lies behind
+    the nodes and edges in it."""
 
     x: float
     y: float
     width: float
     height: float
+    section: bool = False
+
+    @property
+    def area(self) -> float:
+        return self.width * self.height
 
     def distance(self, x: float, y: float) -> float:
         """0 inside the box, else the distance to its nearest edge."""
@@ -93,9 +99,14 @@ class PointerTracker:
         return self._element_at(cx, cy)
 
     def _element_at(self, x: float, y: float) -> str | None:
+        """A node or edge within the radius first, else the innermost section under the pointer."""
         distances = {element: box.distance(x, y) for element, box in self._boxes.items()}
-        nearest = min(distances, key=lambda element: distances[element], default=None)
-        return nearest if nearest is not None and distances[nearest] <= self._radius else None
+        near = [element for element, distance in distances.items() if distance <= self._radius]
+        elements = [element for element in near if not self._boxes[element].section]
+        if elements:
+            return min(elements, key=lambda element: distances[element])
+        sections = [element for element in near if distances[element] == 0.0]
+        return min(sections, key=lambda element: self._boxes[element].area, default=None)
 
     def _point_at(self, element: str | None, time: float) -> None:
         if element == self.pointed:

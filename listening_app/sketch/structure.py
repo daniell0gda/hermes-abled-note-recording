@@ -48,13 +48,17 @@ class Structure:
     groups: tuple[Group, ...] = ()
 
     def element_ids(self) -> set[str]:
-        return {node.id for node in self.nodes} | {edge.id for edge in self.edges}
+        """Ids the viewer can select or point at: nodes, edges and groups (sections)."""
+        return {node.id for node in self.nodes} | {edge.id for edge in self.edges} | {group.id for group in self.groups}
 
     def node(self, node_id: str) -> Node | None:
         return next((node for node in self.nodes if node.id == node_id), None)
 
     def edge(self, edge_id: str) -> Edge | None:
         return next((edge for edge in self.edges if edge.id == edge_id), None)
+
+    def group(self, group_id: str) -> Group | None:
+        return next((group for group in self.groups if group.id == group_id), None)
 
     def to_text(self) -> str:
         """The structure in the line format, as the drawing model is shown its current diagram."""

@@ -227,7 +227,7 @@ class LiveSketch:
             self._window.point(None)
 
     def _boxes_drawn(self, event: WindowEvent) -> None:
-        boxes = {str(element): Box(box["x"], box["y"], box["width"], box["height"])
+        boxes = {str(element): Box(box["x"], box["y"], box["width"], box["height"], bool(box.get("section", False)))
                  for element, box in event["boxes"].items()}
         with self._pointer_lock:
             self._pointer.set_boxes(boxes)

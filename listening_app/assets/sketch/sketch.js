@@ -453,12 +453,13 @@
     }
   }
 
-  /** Client-pixel bounding boxes of every drawn element, keyed by element id. */
+  /** Client-pixel bounding boxes of every drawn element, keyed by element id; `section` marks a group's area. */
   function boxes(svg) {
     const result = {};
     for (const element of svg.querySelectorAll("[data-id]")) {
       const rect = (element.querySelector(".sk-shape, .sk-line") || element).getBoundingClientRect();
-      result[element.getAttribute("data-id")] = { x: rect.left, y: rect.top, width: rect.width, height: rect.height };
+      const section = element.classList.contains("sk-group");
+      result[element.getAttribute("data-id")] = { x: rect.left, y: rect.top, width: rect.width, height: rect.height, section };
     }
     return result;
   }

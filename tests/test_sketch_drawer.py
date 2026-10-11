@@ -48,6 +48,19 @@ def request_path() -> Diagram:
     return diagram
 
 
+def test_a_selected_or_pointed_section_is_named_as_a_group() -> None:
+    drawer, fake = make_drawer(CURRENT)
+    diagram = Diagram(1, DiagramKind.FLOW)
+    diagram.update(parse_structure(CURRENT + '\ngroup backend "Backend": auth, redis'))
+    diagram.select(["backend"])
+
+    drawer.draw(diagram, [SpokenLine("Everything in here runs in Frankfurt.", pointed="backend")])
+
+    prompt = fake.prompt()
+    assert "Selected: Backend (group backend)" in prompt
+    assert "Everything in here runs in Frankfurt. [pointing at Backend (group backend)]" in prompt
+
+
 def test_draw_prompt_carries_the_diagram_its_transcript_and_the_new_lines() -> None:
     drawer, fake = make_drawer(CURRENT)
     diagram = request_path()

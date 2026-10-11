@@ -77,6 +77,27 @@ def test_pointing_started_when_the_mouse_came_to_rest() -> None:
     assert pointer.pointed_during(10.2, 10.8) == "auth"
 
 
+def sectioned() -> PointerTracker:
+    pointer = PointerTracker(radius_px=24, window_s=2)
+    pointer.set_boxes({**BOXES, "line": Box(180, 200, 120, 0),
+                       "backend": Box(60, 60, 400, 200, section=True), "cache": Box(260, 80, 160, 80, section=True)})
+    return pointer
+
+
+def test_an_element_inside_a_section_wins_over_the_section() -> None:
+    assert hold(sectioned(), 140, 120, start=10, seconds=2) == "auth"
+    assert hold(sectioned(), 340, 120, start=10, seconds=2) == "redis"
+
+
+def test_a_line_near_the_pointer_wins_over_the_section_around_it() -> None:
+    assert hold(sectioned(), 240, 210, start=10, seconds=2) == "line"
+
+
+def test_empty_space_in_a_section_points_at_the_innermost_section() -> None:
+    assert hold(sectioned(), 100, 240, start=10, seconds=2) == "backend"
+    assert hold(sectioned(), 410, 90, start=10, seconds=2) == "cache"
+
+
 def test_new_boxes_after_a_redraw_are_used_for_the_next_samples() -> None:
     pointer = tracker()
     pointer.set_boxes({"orders": Box(120, 110, 40, 20)})

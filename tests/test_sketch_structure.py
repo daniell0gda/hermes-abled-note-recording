@@ -109,5 +109,5 @@ def test_text_form_round_trips() -> None:
     assert parse_structure(structure.to_text()) == structure
 
 
-def test_element_ids_cover_nodes_and_edges() -> None:
-    assert parse_structure(DIAGRAM).element_ids() == {"auth", "redis", "auth->redis"}
+def test_element_ids_cover_nodes_edges_and_groups() -> None:
+    assert parse_structure(DIAGRAM).element_ids() == {"auth", "redis", "auth->redis", "backend"}
