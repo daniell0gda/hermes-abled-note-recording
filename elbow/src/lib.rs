@@ -240,6 +240,18 @@ mod tests {
     }
 
     #[test]
+    fn sequence_participants_stand_in_node_order_not_first_message_order() {
+        let click = reference("focus-click");
+        let scene = scene::build(&click, &Params::default());
+        let left_edges: Vec<f64> = click
+            .nodes
+            .iter()
+            .map(|spec| scene.nodes.iter().find(|node| node.id == spec.id).expect("a drawn node").rect.x)
+            .collect();
+        assert!(left_edges.windows(2).all(|pair| pair[0] < pair[1]), "{left_edges:?}");
+    }
+
+    #[test]
     fn an_er_relationship_has_cardinality_marks_and_no_arrowheads() {
         let scene = scene::build(&reference("er"), &Params::default());
         let places = scene.edges.iter().find(|edge| edge.label.as_ref().is_some_and(|label| label.text == "PLACES")).expect("places");

@@ -18,7 +18,7 @@ const TAIL: f64 = 24.0;
 pub fn build(view: &View) -> Scene {
     let (ids, contents) = unique_nodes(view);
     let messages = known_edges(view, &ids);
-    let order = participant_order(ids.len(), &messages);
+    let order: Vec<usize> = (0..ids.len()).collect();
     let column: Vec<usize> = {
         let mut column = vec![0; ids.len()];
         for (position, &node) in order.iter().enumerate() {
@@ -62,19 +62,6 @@ pub fn build(view: &View) -> Scene {
         .collect();
     let right = x.max(edges.iter().filter_map(|edge| edge.label.as_ref()).map(|label| label.rect.right()).fold(0.0, f64::max));
     Scene { nodes, edges, lifelines, width: snap_up(right + MARGIN), height: snap_up(bottom + MARGIN), ..Scene::empty(view.kind) }
-}
-
-fn participant_order(count: usize, messages: &[EdgeInput]) -> Vec<usize> {
-    let mut order: Vec<usize> = Vec::with_capacity(count);
-    for message in messages {
-        for node in [message.source, message.target] {
-            if !order.contains(&node) {
-                order.push(node);
-            }
-        }
-    }
-    order.extend((0..count).filter(|node| !order.contains(node)).collect::<Vec<_>>());
-    order
 }
 
 fn label_gap(message: &EdgeInput, column: &[usize]) -> usize {
