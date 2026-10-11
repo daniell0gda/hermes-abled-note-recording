@@ -2,10 +2,10 @@ use std::io::Read;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use sketch_render::{page, render, render_best, variants, Params, View};
+use elbow::{page, render, render_best, variants, Params, View};
 
 const USAGE: &str =
-    "usage: sketch-render <view.json|-> [--out <file.html|file.svg>] [--params <json>] [--best] [--variants] [--report]";
+    "usage: elbow <view.json|-> [--out <file.html|file.svg>] [--params <json>] [--best] [--variants] [--report]";
 
 struct Options {
     input: String,

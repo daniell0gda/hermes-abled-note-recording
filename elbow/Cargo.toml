@@ -1,5 +1,5 @@
 [package]
-name = "sketch_render"
+name = "elbow"
 version = "0.1.0"
 edition = "2021"
 description = "Draws live-sketch diagrams as editorial SVG with orthogonal, rule-checked connectors"
@@ -8,7 +8,7 @@ description = "Draws live-sketch diagrams as editorial SVG with orthogonal, rule
 path = "src/lib.rs"
 
 [[bin]]
-name = "sketch-render"
+name = "elbow"
 path = "src/main.rs"
 
 [dependencies]

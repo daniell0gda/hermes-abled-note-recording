@@ -1,4 +1,4 @@
-"""Draw a line-format file with the Rust renderer (sketch_render), and score it when a talk is given.
+"""Draw a line-format file with the Rust renderer (elbow), and score it when a talk is given.
 
 usage: python render_rust.py <file.txt> <kind> <tag> [talk] [--params <json>] [--styles <json>] [--theme dark]
 Writes .gen/long_eval/<tag>.json (the view), .html and .png, and prints the renderer's rule report.
@@ -18,7 +18,7 @@ from talks import TALKS, evaluate  # noqa: E402
 from listening_app.sketch.diagrams import Diagram, DiagramKind, EdgeStyle, NodeStyle, Shape  # noqa: E402
 from listening_app.sketch.structure import parse_structure  # noqa: E402
 
-RENDERER = ROOT / "sketch_render" / "target" / "release" / "sketch-render.exe"
+RENDERER = ROOT / "elbow" / "target" / "release" / "elbow.exe"
 
 
 def styled_view(source: Path, kind: DiagramKind, styles: dict) -> dict:

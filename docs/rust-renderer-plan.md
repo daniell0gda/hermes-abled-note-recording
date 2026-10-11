@@ -1,4 +1,4 @@
-# Rust diagram renderer — plan and status
+# elbow, the Rust diagram renderer — plan and status
 
 ## Goal
 
@@ -15,7 +15,7 @@ A Rust library and CLI that draws a live-sketch diagram (the `Diagram.view()` JS
 
 ## Shape
 
-- `sketch_render/` — Rust crate (lib + `sketch-render` binary), only `serde`/`serde_json`.
+- `elbow/` — Rust crate (lib + `elbow` binary), only `serde`/`serde_json`.
   - `spec` — input: the view JSON (`kind`, `nodes` with `shape`/`focal`, `edges` with `style`/`focal`, `groups`).
   - `params` — the typed knobs a model may choose: direction, node gap, channel width, uniform rank size, theme.
   - `layout` — layered layout: cycle break, longest-path ranks, dummy nodes, barycenter ordering, port-aware
@@ -50,12 +50,12 @@ Measured on this machine:
 ## Usage
 
 ```powershell
-cd sketch_render
+cd elbow
 cargo test --release
 cargo build --release
-target\release\sketch-render.exe view.json --best --out diagram.html --report
-target\release\sketch-render.exe view.json --variants            # every candidate with its score, for a model to choose
-target\release\sketch-render.exe view.json --params '{"direction": "down", "theme": "dark"}' --out diagram.svg
+target\release\elbow.exe view.json --best --out diagram.html --report
+target\release\elbow.exe view.json --variants            # every candidate with its score, for a model to choose
+target\release\elbow.exe view.json --params '{"direction": "down", "theme": "dark"}' --out diagram.svg
 ```
 
 On this machine `cargo` needs the VS 2022 Build Tools environment (`vcvars64.bat`) for the MSVC linker.

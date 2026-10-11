@@ -4,7 +4,7 @@
 
 use std::collections::BTreeMap;
 
-use sketch_render::{render, render_best, Params, View};
+use elbow::{render, render_best, Params, View};
 
 const WORDS: [&str; 16] = [
     "sends", "reads", "writes", "calls back", "approves", "rejects", "own db", "notifies", "retries", "assigns", "uploads",
