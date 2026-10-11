@@ -110,7 +110,7 @@ svg {{ display: block; max-width: 100%; height: auto; }}
 mod tests {
     use super::*;
 
-    const REFERENCES: [(&str, &str); 27] = [
+    const REFERENCES: [(&str, &str); 35] = [
         ("backend", include_str!("../tests/backend.json")),
         ("hiring", include_str!("../tests/hiring.json")),
         ("issue", include_str!("../tests/issue.json")),
@@ -138,6 +138,14 @@ mod tests {
         ("db-schema", include_str!("../tests/db-schema.json")),
         ("quadrant", include_str!("../tests/quadrant.json")),
         ("wardley", include_str!("../tests/wardley.json")),
+        ("runner-works", include_str!("../tests/runner-works.json")),
+        ("runner-breaks", include_str!("../tests/runner-breaks.json")),
+        ("runner-services", include_str!("../tests/runner-services.json")),
+        ("focus-click", include_str!("../tests/focus-click.json")),
+        ("focus-coupling", include_str!("../tests/focus-coupling.json")),
+        ("compose-workers", include_str!("../tests/compose-workers.json")),
+        ("npm-cache", include_str!("../tests/npm-cache.json")),
+        ("skill-updates", include_str!("../tests/skill-updates.json")),
     ];
 
     /// False for the kinds whose diagram-design type has no connectors: their view edges are not drawn.

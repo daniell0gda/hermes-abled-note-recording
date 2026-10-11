@@ -1,0 +1,113 @@
+{
+ "number": 1,
+ "title": "One issue, from first command to release",
+ "kind": "sequence",
+ "nodes": [
+  {
+   "id": "agent",
+   "label": "Hermes agent (coder · checker)",
+   "shape": "actor",
+   "focal": false
+  },
+  {
+   "id": "runner",
+   "label": "Runner (Docker socket)",
+   "shape": "service",
+   "focal": false
+  },
+  {
+   "id": "stack",
+   "label": "Service stack (tetra-db · tetra-api)",
+   "shape": "service",
+   "focal": true
+  },
+  {
+   "id": "worker",
+   "label": "Worker (linux-nodejs:24)",
+   "shape": "service",
+   "focal": false
+  }
+ ],
+ "edges": [
+  {
+   "id": "agent->runner",
+   "source": "agent",
+   "target": "runner",
+   "label": "run_project_cmd",
+   "style": "sync"
+  },
+  {
+   "id": "runner->stack",
+   "source": "runner",
+   "target": "stack",
+   "label": "network + services",
+   "style": "sync"
+  },
+  {
+   "id": "runner->stack#2",
+   "source": "runner",
+   "target": "stack",
+   "label": "init jobs · once",
+   "style": "sync"
+  },
+  {
+   "id": "stack->runner",
+   "source": "stack",
+   "target": "runner",
+   "label": "all healthy",
+   "style": "async"
+  },
+  {
+   "id": "runner->worker",
+   "source": "runner",
+   "target": "worker",
+   "label": "worker on net · exec",
+   "style": "sync"
+  },
+  {
+   "id": "worker->stack",
+   "source": "worker",
+   "target": "stack",
+   "label": "tetra-api:8080/api",
+   "style": "sync"
+  },
+  {
+   "id": "stack->worker",
+   "source": "stack",
+   "target": "worker",
+   "label": "json",
+   "style": "async"
+  },
+  {
+   "id": "worker->runner",
+   "source": "worker",
+   "target": "runner",
+   "label": "exit 0",
+   "style": "async"
+  },
+  {
+   "id": "runner->agent",
+   "source": "runner",
+   "target": "agent",
+   "label": "result",
+   "style": "sync"
+  },
+  {
+   "id": "agent->runner#2",
+   "source": "agent",
+   "target": "runner",
+   "label": "release",
+   "style": "sync"
+  },
+  {
+   "id": "runner->stack#3",
+   "source": "runner",
+   "target": "stack",
+   "label": "remove stack + net",
+   "style": "sync"
+  }
+ ],
+ "groups": [],
+ "selected": [],
+ "pointed": null
+}

@@ -1,0 +1,126 @@
+{
+ "number": 1,
+ "title": "Works: one call, one command that ends",
+ "kind": "sequence",
+ "nodes": [
+  {
+   "id": "agent",
+   "label": "Hermes agent (run_project_cmd)",
+   "shape": "actor",
+   "focal": false
+  },
+  {
+   "id": "runner",
+   "label": "Runner (/run · docker exec)",
+   "shape": "service",
+   "focal": false
+  },
+  {
+   "id": "test_worker",
+   "label": "Test worker (linux-cypress:15)",
+   "shape": "service",
+   "focal": false
+  },
+  {
+   "id": "default_worker",
+   "label": "Default worker (linux-nodejs:24)",
+   "shape": "service",
+   "focal": false
+  },
+  {
+   "id": "tetra",
+   "label": "Tetra server (network tetra)",
+   "shape": "external",
+   "focal": false
+  }
+ ],
+ "edges": [
+  {
+   "id": "agent->runner",
+   "source": "agent",
+   "target": "runner",
+   "label": "run npm ci",
+   "style": "sync"
+  },
+  {
+   "id": "runner->default_worker",
+   "source": "runner",
+   "target": "default_worker",
+   "label": "create worker",
+   "style": "sync"
+  },
+  {
+   "id": "runner->default_worker#2",
+   "source": "runner",
+   "target": "default_worker",
+   "label": "exec npm ci",
+   "style": "sync"
+  },
+  {
+   "id": "default_worker->runner",
+   "source": "default_worker",
+   "target": "runner",
+   "label": "exit 0",
+   "style": "async"
+  },
+  {
+   "id": "runner->agent",
+   "source": "runner",
+   "target": "agent",
+   "label": "output",
+   "style": "async"
+  },
+  {
+   "id": "agent->runner#2",
+   "source": "agent",
+   "target": "runner",
+   "label": "run test:e2e",
+   "style": "sync"
+  },
+  {
+   "id": "runner->test_worker",
+   "source": "runner",
+   "target": "test_worker",
+   "label": "create + exec",
+   "style": "sync"
+  },
+  {
+   "id": "test_worker->test_worker",
+   "source": "test_worker",
+   "target": "test_worker",
+   "label": "serve + test",
+   "style": "sync"
+  },
+  {
+   "id": "test_worker->tetra",
+   "source": "test_worker",
+   "target": "tetra",
+   "label": "/api · proxy",
+   "style": "sync"
+  },
+  {
+   "id": "tetra->test_worker",
+   "source": "tetra",
+   "target": "test_worker",
+   "label": "json",
+   "style": "async"
+  },
+  {
+   "id": "test_worker->runner",
+   "source": "test_worker",
+   "target": "runner",
+   "label": "exit 0",
+   "style": "async"
+  },
+  {
+   "id": "runner->agent#2",
+   "source": "runner",
+   "target": "agent",
+   "label": "result",
+   "style": "sync"
+  }
+ ],
+ "groups": [],
+ "selected": [],
+ "pointed": null
+}

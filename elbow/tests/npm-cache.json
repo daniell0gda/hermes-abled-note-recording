@@ -1,0 +1,129 @@
+{
+ "number": 1,
+ "title": "Where a worktree's node_modules comes from",
+ "kind": "swimlane",
+ "nodes": [
+  {
+   "id": "read_runtime",
+   "label": "Read runtime (node -p …)",
+   "shape": "service",
+   "focal": false
+  },
+  {
+   "id": "hash",
+   "label": "Hash inputs (restore → key)",
+   "shape": "service",
+   "focal": false
+  },
+  {
+   "id": "npm_ci",
+   "label": "npm ci (~27 s on k8s)",
+   "shape": "service",
+   "focal": false
+  },
+  {
+   "id": "copy_in",
+   "label": "Copy in (cp -a · 3.5 s)",
+   "shape": "service",
+   "focal": true
+  },
+  {
+   "id": "copy_out",
+   "label": "Copy out (save · tmp+rename)",
+   "shape": "service",
+   "focal": false
+  },
+  {
+   "id": "snapshot",
+   "label": "Snapshot (<key>/ · 1.4 GB)",
+   "shape": "database",
+   "focal": false
+  },
+  {
+   "id": "evict",
+   "label": "Evict (>90 d · over cap)",
+   "shape": "database",
+   "focal": false
+  }
+ ],
+ "edges": [
+  {
+   "id": "read_runtime->hash",
+   "source": "read_runtime",
+   "target": "hash",
+   "label": "runtime",
+   "style": "sync"
+  },
+  {
+   "id": "hash->copy_in",
+   "source": "hash",
+   "target": "copy_in",
+   "label": "hit",
+   "style": "sync"
+  },
+  {
+   "id": "hash->npm_ci",
+   "source": "hash",
+   "target": "npm_ci",
+   "label": "miss",
+   "style": "sync"
+  },
+  {
+   "id": "npm_ci->copy_out",
+   "source": "npm_ci",
+   "target": "copy_out",
+   "label": "exit 0",
+   "style": "sync"
+  },
+  {
+   "id": "snapshot->copy_in",
+   "source": "snapshot",
+   "target": "copy_in",
+   "label": "read",
+   "style": "sync"
+  },
+  {
+   "id": "copy_out->snapshot",
+   "source": "copy_out",
+   "target": "snapshot",
+   "label": "write",
+   "style": "sync"
+  },
+  {
+   "id": "copy_out->evict",
+   "source": "copy_out",
+   "target": "evict",
+   "label": "",
+   "style": "sync"
+  }
+ ],
+ "groups": [
+  {
+   "id": "worker",
+   "label": "Worker (run_project_cmd)",
+   "members": [
+    "read_runtime",
+    "npm_ci"
+   ]
+  },
+  {
+   "id": "hermes",
+   "label": "Hermes (npm_deps.py)",
+   "members": [
+    "hash",
+    "copy_in",
+    "copy_out"
+   ]
+  },
+  {
+   "id": "store",
+   "label": "Store (.node-modules/)",
+   "members": [
+    "snapshot",
+    "evict"
+   ]
+  }
+ ],
+ "selected": [],
+ "pointed": null
+}

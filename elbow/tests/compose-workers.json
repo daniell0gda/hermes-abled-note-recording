@@ -1,0 +1,157 @@
+{
+ "number": 1,
+ "title": "One issue workspace",
+ "kind": "nested",
+ "nodes": [
+  {
+   "id": "agent",
+   "label": "Hermes agent (coder · checker)",
+   "shape": "actor",
+   "focal": false
+  },
+  {
+   "id": "compose_file",
+   "label": "Compose file (.hermes/services.compose.yaml)",
+   "shape": "note",
+   "focal": false
+  },
+  {
+   "id": "runner",
+   "label": "app-container-runner (only Docker access)",
+   "shape": "service",
+   "focal": true
+  },
+  {
+   "id": "tetra_api",
+   "label": "tetra-api (prebuilt image)",
+   "shape": "service",
+   "focal": false
+  },
+  {
+   "id": "tetra_db",
+   "label": "tetra-db (postgres:16)",
+   "shape": "database",
+   "focal": false
+  },
+  {
+   "id": "worker_default",
+   "label": "Worker · default (npm test · ng serve)",
+   "shape": "service",
+   "focal": false
+  },
+  {
+   "id": "worker_client",
+   "label": "Worker · client.test (cypress run)",
+   "shape": "service",
+   "focal": false
+  },
+  {
+   "id": "worktree",
+   "label": "Issue worktree (/opt/workspace · same path as Hermes)",
+   "shape": "database",
+   "focal": false
+  }
+ ],
+ "edges": [
+  {
+   "id": "agent->runner",
+   "source": "agent",
+   "target": "runner",
+   "label": "http /run",
+   "style": "sync"
+  },
+  {
+   "id": "compose_file->runner",
+   "source": "compose_file",
+   "target": "runner",
+   "label": "validated",
+   "style": "data"
+  },
+  {
+   "id": "runner->tetra_api",
+   "source": "runner",
+   "target": "tetra_api",
+   "label": "compose up",
+   "style": "sync"
+  },
+  {
+   "id": "runner->worker_default",
+   "source": "runner",
+   "target": "worker_default",
+   "label": "docker exec",
+   "style": "sync"
+  },
+  {
+   "id": "tetra_api->tetra_db",
+   "source": "tetra_api",
+   "target": "tetra_db",
+   "label": "sql",
+   "style": "sync"
+  },
+  {
+   "id": "worker_default->tetra_api",
+   "source": "worker_default",
+   "target": "tetra_api",
+   "label": "",
+   "style": "sync"
+  },
+  {
+   "id": "worker_client->tetra_api",
+   "source": "worker_client",
+   "target": "tetra_api",
+   "label": "tetra-api:8080",
+   "style": "sync"
+  },
+  {
+   "id": "worker_default->worktree",
+   "source": "worker_default",
+   "target": "worktree",
+   "label": "mount rw",
+   "style": "data"
+  },
+  {
+   "id": "worker_client->worktree",
+   "source": "worker_client",
+   "target": "worktree",
+   "label": "",
+   "style": "data"
+  },
+  {
+   "id": "agent->worktree",
+   "source": "agent",
+   "target": "worktree",
+   "label": "edits",
+   "style": "data"
+  }
+ ],
+ "groups": [
+  {
+   "id": "network",
+   "label": "Network <ws>_default",
+   "members": [
+    "tetra_api",
+    "tetra_db",
+    "worker_default",
+    "worker_client"
+   ]
+  },
+  {
+   "id": "compose",
+   "label": "Compose project <ws> · repo declares",
+   "members": [
+    "tetra_api",
+    "tetra_db"
+   ]
+  },
+  {
+   "id": "workers",
+   "label": "Runner workers · run_project_cmd",
+   "members": [
+    "worker_default",
+    "worker_client"
+   ]
+  }
+ ],
+ "selected": [],
+ "pointed": null
+}

@@ -1,0 +1,106 @@
+{
+ "number": 1,
+ "title": "Breaks: start the app, then test in a later call",
+ "kind": "sequence",
+ "nodes": [
+  {
+   "id": "agent",
+   "label": "Hermes agent (run_project_cmd)",
+   "shape": "actor",
+   "focal": false
+  },
+  {
+   "id": "runner",
+   "label": "Runner (/run · docker exec)",
+   "shape": "service",
+   "focal": false
+  },
+  {
+   "id": "test_worker",
+   "label": "Test worker (linux-cypress:15)",
+   "shape": "service",
+   "focal": false
+  },
+  {
+   "id": "default_worker",
+   "label": "Default worker (linux-nodejs:24)",
+   "shape": "service",
+   "focal": true
+  }
+ ],
+ "edges": [
+  {
+   "id": "agent->runner",
+   "source": "agent",
+   "target": "runner",
+   "label": "run ng serve",
+   "style": "sync"
+  },
+  {
+   "id": "runner->default_worker",
+   "source": "runner",
+   "target": "default_worker",
+   "label": "exec ng serve",
+   "style": "sync"
+  },
+  {
+   "id": "agent->agent",
+   "source": "agent",
+   "target": "agent",
+   "label": "420 s · gives up",
+   "style": "sync"
+  },
+  {
+   "id": "agent->runner#2",
+   "source": "agent",
+   "target": "runner",
+   "label": "run cypress",
+   "style": "sync"
+  },
+  {
+   "id": "runner->test_worker",
+   "source": "runner",
+   "target": "test_worker",
+   "label": "create + exec",
+   "style": "sync"
+  },
+  {
+   "id": "test_worker->test_worker",
+   "source": "test_worker",
+   "target": "test_worker",
+   "label": "no app on :4444",
+   "style": "sync"
+  },
+  {
+   "id": "test_worker->runner",
+   "source": "test_worker",
+   "target": "runner",
+   "label": "exit 1",
+   "style": "async"
+  },
+  {
+   "id": "runner->agent",
+   "source": "runner",
+   "target": "agent",
+   "label": "test failed",
+   "style": "async"
+  },
+  {
+   "id": "runner->runner",
+   "source": "runner",
+   "target": "runner",
+   "label": "900 s timeout",
+   "style": "sync"
+  },
+  {
+   "id": "runner->default_worker#2",
+   "source": "runner",
+   "target": "default_worker",
+   "label": "kill + remove",
+   "style": "sync"
+  }
+ ],
+ "groups": [],
+ "selected": [],
+ "pointed": null
+}

@@ -1,0 +1,128 @@
+{
+ "number": 1,
+ "title": "How a skill change reaches Hermes",
+ "kind": "swimlane",
+ "nodes": [
+  {
+   "id": "edit",
+   "label": "Edit shared code (caiq-issue-lib/scripts)",
+   "shape": "service",
+   "focal": false
+  },
+  {
+   "id": "commit",
+   "label": "Commit + push (one file, no copies)",
+   "shape": "service",
+   "focal": false
+  },
+  {
+   "id": "repo",
+   "label": "hermes-skills repo (CI runs the tests)",
+   "shape": "external",
+   "focal": false
+  },
+  {
+   "id": "install",
+   "label": "Install / update (hermes skills update)",
+   "shape": "service",
+   "focal": true
+  },
+  {
+   "id": "compare",
+   "label": "Compare each file (reinstall on any diff)",
+   "shape": "service",
+   "focal": false
+  },
+  {
+   "id": "profile",
+   "label": "Profile skills (profiles/<p>/skills/)",
+   "shape": "database",
+   "focal": false
+  },
+  {
+   "id": "agent_script",
+   "label": "Agent runs script (submit_issue.py)",
+   "shape": "service",
+   "focal": false
+  }
+ ],
+ "edges": [
+  {
+   "id": "edit->commit",
+   "source": "edit",
+   "target": "commit",
+   "label": "",
+   "style": "sync"
+  },
+  {
+   "id": "commit->repo",
+   "source": "commit",
+   "target": "repo",
+   "label": "push",
+   "style": "sync"
+  },
+  {
+   "id": "repo->install",
+   "source": "repo",
+   "target": "install",
+   "label": "get raw files",
+   "style": "sync"
+  },
+  {
+   "id": "install->compare",
+   "source": "install",
+   "target": "compare",
+   "label": "",
+   "style": "sync"
+  },
+  {
+   "id": "compare->profile",
+   "source": "compare",
+   "target": "profile",
+   "label": "write",
+   "style": "sync"
+  },
+  {
+   "id": "profile->agent_script",
+   "source": "profile",
+   "target": "agent_script",
+   "label": "",
+   "style": "sync"
+  }
+ ],
+ "groups": [
+  {
+   "id": "machine",
+   "label": "Our machine (before each commit)",
+   "members": [
+    "edit",
+    "commit"
+   ]
+  },
+  {
+   "id": "gitlab",
+   "label": "GitLab (hermes-skills, public)",
+   "members": [
+    "repo"
+   ]
+  },
+  {
+   "id": "provision",
+   "label": "Provision (server, one-shot, run by us)",
+   "members": [
+    "install",
+    "compare"
+   ]
+  },
+  {
+   "id": "gateway",
+   "label": "Hermes gateway (server, always running)",
+   "members": [
+    "profile",
+    "agent_script"
+   ]
+  }
+ ],
+ "selected": [],
+ "pointed": null
+}
