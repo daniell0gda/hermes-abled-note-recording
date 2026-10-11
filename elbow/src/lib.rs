@@ -1,4 +1,4 @@
-//! Draws live-sketch diagrams as editorial SVG: layered layout, orthogonal connectors with rounded
+//! Draws diagrams as editorial SVG from a small JSON view: layered layout, orthogonal connectors with rounded
 //! elbows, masked labels and a legend, with the diagram-design connector rules checked in code.
 
 mod cardinality;

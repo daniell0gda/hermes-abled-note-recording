@@ -1,4 +1,4 @@
-//! The diagram to draw: the live sketch's `Diagram.view()` JSON.
+//! The diagram to draw: the JSON view that a model or a program writes.
 
 use serde::Deserialize;
 
