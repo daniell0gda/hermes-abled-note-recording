@@ -1,0 +1,22 @@
+title "How hiring works"
+job_description "Write job description"
+technical_interview "Technical interview"
+decide "Decide"
+post_job "Post job"
+screen "Screen candidates"
+rejection "Send polite rejection"
+team_interview "Team interview"
+offer "Make offer"
+onboarding "Onboarding paperwork"
+job_description -> post_job
+post_job -> screen
+screen -> technical_interview "good ones"
+technical_interview -> team_interview "likes them"
+technical_interview -> rejection "not"
+team_interview -> decide "feedback"
+decide -> offer
+offer -> onboarding "if signed"
+group manager "Hiring manager": job_description, technical_interview, decide
+group recruiter "Recruiter": post_job, screen, rejection
+group engineers "Engineers": team_interview
+group hr "HR": offer, onboarding

@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Issue workflow</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #f5f5f5;
+      --color-ink:     #2d3142;
+      --color-muted:   #4f5d75;
+      --color-accent:  #eb6c36;
+      --font-sans:     'Geist', system-ui, sans-serif;
+      --font-serif:    'Instrument Serif', serif;
+      --font-mono:     'Geist Mono', ui-monospace, monospace;
+    }
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+    }
+    .frame { max-width: 1240px; width: 100%; }
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.5rem;
+    }
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      margin-bottom: 0.75rem;
+    }
+    .lede { color: var(--color-muted); font-size: 0.9rem; max-width: 760px; margin-bottom: 1.5rem; line-height: 1.5; }
+    .canvas { overflow-x: auto; }
+    svg { width: 100%; min-width: 900px; display: block; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Swimlane · show-me reference</p>
+    <h1>Issue workflow</h1>
+    <p class="lede">Hand-drawn reference of the same talk, to compare with the live sketch result in <code>v4_d1.png</code>. The team leader owns the workflow, the team loops until the checker is satisfied, and the leader closes the issue after reviewing the artifacts.</p>
+
+    <div class="canvas">
+    <svg viewBox="0 0 1168 620" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="issue-workflow-title issue-workflow-desc">
+      <title id="issue-workflow-title">Issue workflow</title>
+      <desc id="issue-workflow-desc">Swimlane diagram of an issue moving from the create-issue and start-issue skills to a team leader, through a planner, implementor and checker loop with an optional manual tester, to the leader's artifact review that marks the GitHub issue done.</desc>
+      <defs>
+        <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/></marker>
+        <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#eb6c36"/></marker>
+        <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/></marker>
+      </defs>
+
+      <rect width="100%" height="100%" fill="#f5f5f5"/>
+
+      <!-- Lane dividers -->
+      <line x1="40" y1="80" x2="1144" y2="80" stroke="rgba(45,49,66,0.22)" stroke-width="1"/>
+      <line x1="40" y1="168" x2="1144" y2="168" stroke="rgba(45,49,66,0.10)" stroke-width="1"/>
+      <line x1="40" y1="256" x2="1144" y2="256" stroke="rgba(45,49,66,0.10)" stroke-width="1"/>
+      <line x1="40" y1="344" x2="1144" y2="344" stroke="rgba(45,49,66,0.10)" stroke-width="1"/>
+      <line x1="40" y1="460" x2="1144" y2="460" stroke="rgba(45,49,66,0.10)" stroke-width="1"/>
+      <line x1="40" y1="548" x2="1144" y2="548" stroke="rgba(45,49,66,0.22)" stroke-width="1"/>
+      <line x1="160" y1="80" x2="160" y2="548" stroke="rgba(45,49,66,0.22)" stroke-width="1"/>
+
+      <!-- Lane labels -->
+      <text x="56" y="128" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" letter-spacing="0.18em">YOU</text>
+      <text x="56" y="216" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" letter-spacing="0.18em">GITHUB</text>
+      <text x="56" y="304" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" letter-spacing="0.18em">TEAM LEADER</text>
+      <text x="56" y="392" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" letter-spacing="0.18em">TEAM</text>
+      <text x="56" y="508" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" letter-spacing="0.18em">MANUAL TESTER</text>
+
+      <!-- Arrows (drawn before nodes) -->
+      <!-- create-issue → issue -->
+      <line x1="248" y1="148" x2="248" y2="186" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <!-- create-issue → start-issue -->
+      <line x1="312" y1="124" x2="342" y2="124" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <!-- start-issue → run workflow -->
+      <path d="M408 148 L408 292 Q408 300 416 300 L502 300" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <!-- run workflow → planner -->
+      <line x1="568" y1="324" x2="568" y2="362" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <!-- planner → implementor -->
+      <line x1="632" y1="388" x2="662" y2="388" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <!-- implementor → checker -->
+      <line x1="792" y1="388" x2="822" y2="388" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <!-- checker → implementor (loop) -->
+      <path d="M856 412 L856 424 Q856 432 848 432 L736 432 Q728 432 728 424 L728 414" fill="none" stroke="#4f5d75" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+      <!-- checker → manual tester (optional) -->
+      <line x1="920" y1="412" x2="920" y2="478" stroke="#4f5d75" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+      <!-- checker → review artifacts -->
+      <path d="M952 388 L1048 388 Q1056 388 1056 380 L1056 326" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <!-- manual tester → review artifacts (optional) -->
+      <path d="M952 504 L1080 504 Q1088 504 1088 496 L1088 326" fill="none" stroke="#4f5d75" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+      <!-- review artifacts → issue done (focal, hops over start-issue → run workflow) -->
+      <path d="M1056 276 L1056 220 Q1056 212 1048 212 L416 212 A8 8 0 0 0 400 212 L314 212" fill="none" stroke="#eb6c36" stroke-width="1.4" marker-end="url(#arrow-accent)"/>
+
+      <!-- Arrow labels -->
+      <rect x="256" y="162" width="36" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="274" y="171" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">OPENS</text>
+
+      <rect x="416" y="236" width="32" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="432" y="245" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">RUNS</text>
+
+      <rect x="576" y="330" width="44" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="598" y="339" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">ASSIGNS</text>
+
+      <rect x="634" y="368" width="28" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="648" y="377" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.04em">PLAN</text>
+
+      <rect x="754" y="440" width="76" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="792" y="449" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">NOT SATISFIED</text>
+
+      <rect x="928" y="436" width="68" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="962" y="445" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">VISUAL CHECK</text>
+
+      <rect x="970" y="368" width="56" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="998" y="377" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">WORK GOOD</text>
+
+      <rect x="692" y="192" width="56" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="720" y="201" fill="#eb6c36" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">MARK DONE</text>
+
+      <!-- Nodes -->
+      <!-- You: create-issue skill -->
+      <rect x="184" y="100" width="128" height="48" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="248" y="122" fill="#2d3142" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Create-issue skill</text>
+      <text x="248" y="136" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">skill</text>
+
+      <!-- You: start-issue skill -->
+      <rect x="344" y="100" width="128" height="48" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="408" y="122" fill="#2d3142" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Start-issue skill</text>
+      <text x="408" y="136" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">skill</text>
+
+      <!-- GitHub: issue (store) -->
+      <rect x="184" y="188" width="128" height="48" rx="6" fill="#f5f5f5"/>
+      <rect x="184" y="188" width="128" height="48" rx="6" fill="rgba(45,49,66,0.05)" stroke="#4f5d75" stroke-width="1"/>
+      <text x="248" y="210" fill="#2d3142" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Issue</text>
+      <text x="248" y="224" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">open → done</text>
+
+      <!-- Team leader: run workflow -->
+      <rect x="504" y="276" width="128" height="48" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="568" y="298" fill="#2d3142" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Run workflow</text>
+      <text x="568" y="312" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">manages the team</text>
+
+      <!-- Team leader: review artifacts (focal) -->
+      <rect x="984" y="276" width="144" height="48" rx="6" fill="#f5f5f5"/>
+      <rect x="984" y="276" width="144" height="48" rx="6" fill="rgba(235,108,54,0.08)" stroke="#eb6c36" stroke-width="1"/>
+      <text x="1056" y="298" fill="#2d3142" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Review artifacts</text>
+      <text x="1056" y="312" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">plan.md · notes · findings</text>
+
+      <!-- Team: planner -->
+      <rect x="504" y="364" width="128" height="48" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="568" y="386" fill="#2d3142" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Planner</text>
+      <text x="568" y="400" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">leaves plan.md</text>
+
+      <!-- Team: implementor -->
+      <rect x="664" y="364" width="128" height="48" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="728" y="386" fill="#2d3142" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Implementor</text>
+      <text x="728" y="400" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">leaves notes</text>
+
+      <!-- Team: checker -->
+      <rect x="824" y="364" width="128" height="48" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="888" y="386" fill="#2d3142" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Checker</text>
+      <text x="888" y="400" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">leaves findings</text>
+
+      <!-- Manual tester (optional) -->
+      <rect x="824" y="480" width="128" height="48" rx="6" fill="#f5f5f5"/>
+      <rect x="824" y="480" width="128" height="48" rx="6" fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.20)" stroke-width="1" stroke-dasharray="4,3"/>
+      <text x="888" y="502" fill="#2d3142" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Manual tester</text>
+      <text x="888" y="516" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">only if needed</text>
+
+      <!-- Legend -->
+      <line x1="40" y1="572" x2="1144" y2="572" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+      <text x="40" y="596" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.14em">LEGEND</text>
+      <line x1="120" y1="593" x2="148" y2="593" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <text x="156" y="596" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace">work moves on</text>
+      <line x1="280" y1="593" x2="308" y2="593" stroke="#4f5d75" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+      <text x="316" y="596" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace">loop or optional</text>
+      <line x1="452" y1="593" x2="480" y2="593" stroke="#eb6c36" stroke-width="1.4" marker-end="url(#arrow-accent)"/>
+      <text x="488" y="596" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace">closes the issue</text>
+      <rect x="616" y="586" width="20" height="14" rx="3" fill="rgba(45,49,66,0.05)" stroke="#4f5d75" stroke-width="1"/>
+      <text x="644" y="596" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace">GitHub record</text>
+      <rect x="752" y="586" width="20" height="14" rx="3" fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.20)" stroke-width="1" stroke-dasharray="4,3"/>
+      <text x="780" y="596" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace">optional step</text>
+    </svg>
+    </div>
+  </div>
+</body>
+</html>

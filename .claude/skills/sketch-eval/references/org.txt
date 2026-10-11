@@ -1,0 +1,20 @@
+title "Engineering department"
+maria "Maria (head of engineering)"
+platform "Platform (Tom)"
+product "Product (Anna)"
+data "Data (Raj)"
+security "Security team"
+infra "Infra team"
+devtools "Developer tools team"
+web "Web team"
+mobile "Mobile team"
+analytics "Analytics team"
+maria -> platform
+maria -> product
+maria -> data
+maria -> security
+platform -> infra
+platform -> devtools
+product -> web
+product -> mobile
+data -> analytics

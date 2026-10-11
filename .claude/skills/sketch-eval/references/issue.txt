@@ -1,0 +1,26 @@
+title "Issue workflow"
+create_issue "Create-issue skill"
+start_issue "Start-issue skill"
+issue "Issue"
+run_workflow "Run workflow"
+review "Review artifacts"
+planner "Planner"
+implementor "Implementor"
+checker "Checker"
+manual_tester "Manual tester"
+create_issue -> issue "opens"
+create_issue -> start_issue
+start_issue -> run_workflow "runs"
+run_workflow -> planner "assigns"
+planner -> implementor "plan"
+implementor -> checker
+checker -> implementor "not satisfied"
+checker -> manual_tester "visual check"
+checker -> review "work good"
+manual_tester -> review
+review -> issue "mark done"
+group you "You": create_issue, start_issue
+group github "GitHub": issue
+group leader "Team leader": run_workflow, review
+group team "Team": planner, implementor, checker
+group tester "Manual tester": manual_tester
