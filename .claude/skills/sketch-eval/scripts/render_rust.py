@@ -12,13 +12,14 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from run_talks import EDGE, OUT, ROOT  # noqa: E402
+from run_talks import EDGE, OUT  # noqa: E402
 from talks import TALKS, evaluate  # noqa: E402
 
 from listening_app.sketch.diagrams import Diagram, DiagramKind, EdgeStyle, NodeStyle, Shape  # noqa: E402
+from listening_app.sketch.elbow import program_path  # noqa: E402
 from listening_app.sketch.structure import parse_structure  # noqa: E402
 
-RENDERER = ROOT / "elbow" / "target" / "release" / "elbow.exe"
+RENDERER = program_path()
 
 
 def styled_view(source: Path, kind: DiagramKind, styles: dict) -> dict:

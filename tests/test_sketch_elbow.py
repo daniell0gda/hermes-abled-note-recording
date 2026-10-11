@@ -8,7 +8,7 @@ from listening_app.sketch.elbow import ElbowRenderer, Theme, program_path
 from listening_app.sketch.pipeline import SketchState
 
 PROGRAM = program_path()
-needs_elbow = pytest.mark.skipif(PROGRAM is None, reason="elbow is not built (cargo build --release in elbow/)")
+needs_elbow = pytest.mark.skipif(PROGRAM is None, reason="elbow is not built (cargo build --release in ../elbow) or installed")
 
 
 def view(kind: str = "kanban", selected: list[str] | None = None) -> dict[str, Any]:

@@ -1,15 +1,18 @@
 # Builds dist\ListeningApp\ListeningApp.exe: one folder, no console window.
 # Usage (from the project folder):  .\build.ps1
 #   -DistRoot .gen\dist  builds into that folder instead, leaving dist\ListeningApp alone.
-param([string]$DistRoot = 'dist')
+#   -Elbow <path>        the elbow checkout to build and bundle (default: ..\elbow next to this project).
+param([string]$DistRoot = 'dist', [string]$Elbow = (Join-Path (Split-Path $PSScriptRoot -Parent) 'elbow'))
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 $python = Join-Path $root '.venv\Scripts\python.exe'
 $build = Join-Path $root 'build'
 $dist = Join-Path $root $DistRoot
 $app = Join-Path $dist 'ListeningApp'
-$elbow = Join-Path $root 'elbow'
 $vcvars = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat'
+if (-not (Test-Path (Join-Path $elbow 'Cargo.toml'))) {
+    throw "No elbow checkout at $elbow. Clone https://github.com/daniell0gda/elbow there or pass -Elbow <path>."
+}
 
 # elbow, the Rust diagram renderer, is bundled as elbow\elbow.exe; cargo needs the MSVC linker environment.
 $cargo = "cargo build --release --manifest-path `"$elbow\Cargo.toml`""

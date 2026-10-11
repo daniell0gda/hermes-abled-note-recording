@@ -2,6 +2,7 @@
 
 import json
 import logging
+import shutil
 import subprocess
 import threading
 import winreg
@@ -18,6 +19,7 @@ log = logging.getLogger(__name__)
 
 PROGRAM_NAME = "elbow.exe"
 BUNDLED_FOLDER = "elbow"
+SIBLING_REPO = "elbow"
 TIMEOUT_S = 5.0
 CACHE_SIZE = 64
 PERSONALIZE_KEY = r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
@@ -31,10 +33,13 @@ class Theme(StrEnum):
 
 
 def program_path() -> Path | None:
-    """The bundled elbow program, or the crate's release build when run from source; None when neither exists."""
+    """The bundled elbow program; from source, the release build of the elbow checkout next to this project, else
+    elbow on PATH. None when none exists."""
     candidates = (paths.bundle_dir() / BUNDLED_FOLDER / PROGRAM_NAME,
-                  paths.install_dir() / "elbow" / "target" / "release" / PROGRAM_NAME)
-    return next((candidate for candidate in candidates if candidate.is_file()), None)
+                  paths.install_dir().parent / SIBLING_REPO / "target" / "release" / PROGRAM_NAME)
+    found = next((candidate for candidate in candidates if candidate.is_file()), None)
+    on_path = shutil.which(PROGRAM_NAME)
+    return found or (Path(on_path) if on_path else None)
 
 
 def system_theme() -> Theme:

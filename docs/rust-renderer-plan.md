@@ -15,7 +15,9 @@ A Rust library and CLI that draws a live-sketch diagram (the `Diagram.view()` JS
 
 ## Shape
 
-- `elbow/` — Rust crate (lib + `elbow` binary), only `serde`/`serde_json`.
+- The elbow repo ([github.com/daniell0gda/elbow](https://github.com/daniell0gda/elbow), checked out next to this
+  project as `..\elbow`) — Rust crate (lib + `elbow` binary), only `serde`/`serde_json`. It is the only copy of the
+  code: change elbow there; `build.ps1` builds and bundles it from that checkout.
   - `spec` — input: the view JSON (`kind`, `nodes` with `shape`/`focal`, `edges` with `style`/`focal`, `groups`).
   - `params` — the typed knobs a model may choose: direction, node gap, channel width, uniform rank size, theme.
   - `layout` — layered layout: cycle break, longest-path ranks, dummy nodes, barycenter ordering, port-aware
@@ -59,7 +61,7 @@ A Rust library and CLI that draws a live-sketch diagram (the `Diagram.view()` JS
 | 2. Fine-tune flow: labels, groups as zones, edge styles, legend | Done |
 | 3. More kinds: tree, state, sequence, swimlane | Done. All six reference talks: 0 violations |
 | 4. Variant search | Done. `--best` / `--variants` |
-| 4b. The other kinds: er, nested, layers, dependency | Done. One fixture each in `elbow/tests/`: 0 violations |
+| 4b. The other kinds: er, nested, layers, dependency | Done. One fixture each in the elbow repo's `tests/`: 0 violations |
 | 4c. The rest of the diagram-design catalogue that fits the view (17 kinds) | Done. One fixture each: 0 violations |
 | 5a. Use in the app through the CLI | Done. `sketch/elbow.py` draws every view with `elbow.exe --best` (cached, theme from Windows); the window and the saved HTML show that SVG, `sketch.js` only when elbow is missing or fails. `build.ps1` builds and bundles it |
 | 5b. PyO3 binding, Jev choosing `params` | Not started |
@@ -108,7 +110,7 @@ Measured on this machine:
 ## Usage
 
 ```powershell
-cd elbow
+cd ..\elbow
 cargo test --release
 cargo build --release
 target\release\elbow.exe view.json --best --out diagram.html --report
