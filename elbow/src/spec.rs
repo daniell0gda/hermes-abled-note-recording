@@ -107,4 +107,8 @@ pub struct View {
     pub edges: Vec<EdgeSpec>,
     #[serde(default)]
     pub groups: Vec<GroupSpec>,
+    #[serde(default)]
+    pub selected: Vec<String>,
+    #[serde(default)]
+    pub pointed: Option<String>,
 }

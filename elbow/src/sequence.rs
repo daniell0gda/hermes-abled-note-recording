@@ -119,11 +119,14 @@ fn draw_message(message: &EdgeInput, y: f64, centres: &[f64], column: &[usize]) 
         (vec![Point::new(from, y), Point::new(to, y)], mask)
     };
     SceneEdge {
+        id: message.id.clone(),
         source: message.source,
         target: message.target,
         points,
         style: message.style,
         focal: message.focal,
+        cycle: false,
         label: (!message.text.is_empty()).then(|| LabelBox { rect: label, text: message.text.clone() }),
+        marks: Vec::new(),
     }
 }

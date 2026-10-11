@@ -1,0 +1,23 @@
+{
+ "number": 1,
+ "title": "Shop data model",
+ "kind": "er",
+ "nodes": [
+  {"id": "customer", "label": "Customer (id, name, email)", "shape": "service", "focal": false},
+  {"id": "order", "label": "Order (id, customer_id, placed_at, status)", "shape": "service", "focal": false},
+  {"id": "order_line", "label": "Order line (order_id, product_id, quantity)", "shape": "service", "focal": false},
+  {"id": "product", "label": "Product (id, name, price)", "shape": "service", "focal": false},
+  {"id": "category", "label": "Category (id, name)", "shape": "service", "focal": false},
+  {"id": "address", "label": "Address (id, customer_id, city)", "shape": "service", "focal": false}
+ ],
+ "edges": [
+  {"id": "customer->order", "source": "customer", "target": "order", "label": "places 1:N", "style": "sync", "focal": false},
+  {"id": "order->order_line", "source": "order", "target": "order_line", "label": "contains 1:N", "style": "sync", "focal": false},
+  {"id": "product->order_line", "source": "product", "target": "order_line", "label": "1:N", "style": "sync", "focal": false},
+  {"id": "category->product", "source": "category", "target": "product", "label": "groups one-to-many", "style": "sync", "focal": false},
+  {"id": "customer->address", "source": "customer", "target": "address", "label": "lives at 1..*:0..*", "style": "sync", "focal": false}
+ ],
+ "groups": [],
+ "selected": [],
+ "pointed": null
+}

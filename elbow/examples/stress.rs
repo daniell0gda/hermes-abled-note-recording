@@ -6,11 +6,11 @@ use std::collections::BTreeMap;
 
 use elbow::{render, render_best, Params, View};
 
-const WORDS: [&str; 16] = [
+const WORDS: [&str; 18] = [
     "sends", "reads", "writes", "calls back", "approves", "rejects", "own db", "notifies", "retries", "assigns", "uploads",
-    "token", "redirect with code", "payment fails 3 times", "ok", "",
+    "token", "redirect with code", "payment fails 3 times", "ok", "has 1:N", "one-to-many", "",
 ];
-const KINDS: [&str; 5] = ["flow", "state", "tree", "sequence", "swimlane"];
+const KINDS: [&str; 9] = ["flow", "state", "tree", "sequence", "swimlane", "er", "nested", "layers", "dependency"];
 
 struct Random(u64);
 
@@ -42,18 +42,22 @@ fn random_view(random: &mut Random, dense: bool) -> String {
             format!(r#"{{"source": "n{source}", "target": "n{target}", "label": "{label}"}}"#)
         })
         .collect();
-    let groups = if kind == "swimlane" {
-        let lanes = 2 + random.below(3);
-        (0..lanes)
-            .map(|lane| {
-                let members: Vec<String> = (0..count).filter(|node| node % lanes == lane).map(|node| format!(r#""n{node}""#)).collect();
-                format!(r#"{{"id": "lane{lane}", "label": "Lane {lane}", "members": [{}]}}"#, members.join(","))
-            })
-            .collect::<Vec<_>>()
-            .join(",")
-    } else {
-        String::new()
+    let group = |id: String, members: Vec<usize>| {
+        let members: Vec<String> = members.iter().map(|node| format!(r#""n{node}""#)).collect();
+        format!(r#"{{"id": "{id}", "label": "Group {id}", "members": [{}]}}"#, members.join(","))
     };
+    let groups = match kind {
+        "swimlane" | "layers" => {
+            let lanes = 2 + random.below(3);
+            (0..lanes).map(|lane| group(format!("lane{lane}"), (0..count).filter(|node| node % lanes == lane).collect())).collect::<Vec<_>>()
+        }
+        "nested" => {
+            let levels = 1 + random.below(3);
+            (0..levels).map(|level| group(format!("ring{level}"), (1 + level * count / (levels + 1)..count).collect())).collect()
+        }
+        _ => Vec::new(),
+    }
+    .join(",");
     format!(
         r#"{{"title": "Random", "kind": "{kind}", "nodes": [{}], "edges": [{}], "groups": [{groups}]}}"#,
         nodes.join(","),

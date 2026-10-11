@@ -28,7 +28,7 @@ pub struct Variant {
 /// The parameter sets worth trying for `view`, all based on `base`.
 pub fn candidates(view: &View, base: &Params) -> Vec<Params> {
     let directions: Vec<Option<Direction>> = match view.kind {
-        Kind::Sequence | Kind::Swimlane => vec![base.direction],
+        Kind::Sequence | Kind::Swimlane | Kind::Layers => vec![base.direction],
         _ => vec![Some(Direction::Right), Some(Direction::Down)],
     };
     let mut all = Vec::new();

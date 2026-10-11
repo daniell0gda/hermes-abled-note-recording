@@ -169,7 +169,7 @@ fn runs_through_nodes(scene: &Scene, runs: &[Vec<Segment>], violations: &mut Vec
 
 fn labels_on_things(scene: &Scene, runs: &[Vec<Segment>], violations: &mut Vec<Violation>) {
     let labels: Vec<(usize, Rect)> =
-        scene.edges.iter().enumerate().filter_map(|(edge, data)| data.label.as_ref().map(|label| (edge, label.rect))).collect();
+        scene.edges.iter().enumerate().flat_map(|(edge, data)| data.texts().map(move |text| (edge, text.rect))).collect();
     for (position, &(edge, rect)) in labels.iter().enumerate() {
         for node in scene.nodes.iter().filter(|node| rect.overlaps(&node.rect)) {
             violations.push(Violation { rule: 6, detail: format!("label of {} covers {}", name(scene, edge), node.id) });

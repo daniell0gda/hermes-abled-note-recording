@@ -10,14 +10,32 @@ const RELAX_ROUNDS: usize = 40;
 const STRAIGHT_WEIGHT: f64 = 8.0;
 const TRANSPOSE_ROUNDS: usize = 4;
 
+/// Where a node must sit inside its rank: anywhere, or at the low or high end of it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Pin {
+    Low,
+    #[default]
+    Free,
+    High,
+}
+
 /// The size of a node: `su` along the ranks, `sv` across them, `room_low` kept free on its low-`v` side,
-/// and the lane (band across the ranks) it must stay in when the layout has lanes.
+/// the lane (band across the ranks) it must stay in when the layout has lanes, and its pin.
 #[derive(Clone, Copy, Debug)]
 pub struct NodeBox {
     pub su: f64,
     pub sv: f64,
     pub room_low: f64,
     pub lane: usize,
+    pub pin: Pin,
+}
+
+/// Bands the layout must keep: lanes across the ranks with the room each keeps free before and after
+/// its nodes, or tiers along the ranks (`tiers[node]`, lowest first) that each own whole ranks.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Bands<'a> {
+    pub lane_room: Option<&'a [(f64, f64)]>,
+    pub tiers: Option<&'a [usize]>,
 }
 
 #[derive(Clone, Debug)]
@@ -27,6 +45,7 @@ pub struct Vertex {
     pub sv: f64,
     pub room_low: f64,
     pub lane: usize,
+    pub pin: Pin,
     pub dummy: bool,
     pub v: f64,
 }
@@ -55,6 +74,7 @@ pub struct Layered {
     pub hops: Vec<Hop>,
     pub chains: Vec<Chain>,
     pub lane_bands: Vec<(f64, f64)>,
+    pub lane_room: Vec<(f64, f64)>,
 }
 
 impl Layered {
@@ -78,25 +98,65 @@ impl Layered {
 }
 
 /// Lays out `boxes` connected by `edges` (pairs of box indices, no self loops).
-/// With `lanes`, every box stays inside the band of its lane, and bands run across all ranks.
-pub fn layer(boxes: &[NodeBox], edges: &[(usize, usize)], node_gap: f64, sweeps: usize, lanes: bool) -> Layered {
-    let reversed = reversed_edges(boxes.len(), edges);
+/// With lanes, every box stays inside the band of its lane, and bands run across all ranks.
+/// With tiers, every tier owns a run of whole ranks, in tier order.
+pub fn layer(boxes: &[NodeBox], edges: &[(usize, usize)], node_gap: f64, sweeps: usize, bands: Bands) -> Layered {
+    let reversed = back_edges(boxes.len(), edges, bands.tiers);
     let forward: Vec<(usize, usize)> = edges
         .iter()
         .zip(&reversed)
         .map(|(&(a, b), &flip)| if flip { (b, a) } else { (a, b) })
         .collect();
-    let ranks = assign_ranks(boxes.len(), &forward);
+    let ranks = match bands.tiers {
+        Some(tiers) => tiered_ranks(&forward, tiers),
+        None => assign_ranks(boxes.len(), &forward),
+    };
     let mut layered = with_dummies(boxes, &forward, &reversed, &ranks);
     order(&mut layered, sweeps);
+    apply_pins(&mut layered);
     assign_slots(&mut layered);
     grow_for_ports(&mut layered);
-    if lanes {
-        place_in_lanes(&mut layered, node_gap);
-    } else {
-        place_across(&mut layered, node_gap);
+    match bands.lane_room {
+        Some(room) => place_in_lanes(&mut layered, node_gap, room),
+        None => place_across(&mut layered, node_gap),
     }
     layered
+}
+
+/// Which `edges` point against the ranks: the ones a cycle break reverses, and with tiers every edge
+/// from a later tier to an earlier one.
+pub fn back_edges(count: usize, edges: &[(usize, usize)], tiers: Option<&[usize]>) -> Vec<bool> {
+    let Some(tiers) = tiers else { return reversed_edges(count, edges) };
+    let within: Vec<usize> = (0..edges.len()).filter(|&index| tiers[edges[index].0] == tiers[edges[index].1]).collect();
+    let local_pairs: Vec<(usize, usize)> = within.iter().map(|&index| edges[index]).collect();
+    let local = reversed_edges(count, &local_pairs);
+    let mut reversed: Vec<bool> = edges.iter().map(|&(a, b)| tiers[a] > tiers[b]).collect();
+    for (&index, flip) in within.iter().zip(local) {
+        reversed[index] = flip;
+    }
+    reversed
+}
+
+fn tiered_ranks(forward: &[(usize, usize)], tiers: &[usize]) -> Vec<usize> {
+    let within: Vec<(usize, usize)> = forward.iter().copied().filter(|&(a, b)| tiers[a] == tiers[b]).collect();
+    let local = assign_ranks(tiers.len(), &within);
+    let tier_count = tiers.iter().map(|&tier| tier + 1).max().unwrap_or(0);
+    let mut depth = vec![0usize; tier_count];
+    for (&tier, &rank) in tiers.iter().zip(&local) {
+        depth[tier] = depth[tier].max(rank + 1);
+    }
+    let mut start = vec![0usize; tier_count];
+    for tier in 1..tier_count {
+        start[tier] = start[tier - 1] + depth[tier - 1];
+    }
+    tiers.iter().zip(local).map(|(&tier, rank)| start[tier] + rank).collect()
+}
+
+fn apply_pins(layered: &mut Layered) {
+    let vertices = &layered.vertices;
+    for rank in &mut layered.ranks {
+        rank.sort_by_key(|&vertex| (vertices[vertex].lane, vertices[vertex].pin));
+    }
 }
 
 fn reversed_edges(count: usize, edges: &[(usize, usize)]) -> Vec<bool> {
@@ -179,6 +239,7 @@ fn with_dummies(boxes: &[NodeBox], edges: &[(usize, usize)], reversed: &[bool], 
             sv: size.sv,
             room_low: size.room_low,
             lane: size.lane,
+            pin: size.pin,
             dummy: false,
             v: 0.0,
         })
@@ -188,7 +249,16 @@ fn with_dummies(boxes: &[NodeBox], edges: &[(usize, usize)], reversed: &[bool], 
     for (index, &(a, b)) in edges.iter().enumerate() {
         let mut path = vec![a];
         for rank in ranks[a] + 1..ranks[b] {
-            vertices.push(Vertex { rank, su: 0.0, sv: 0.0, room_low: 0.0, lane: boxes[b].lane, dummy: true, v: 0.0 });
+            vertices.push(Vertex {
+                rank,
+                su: 0.0,
+                sv: 0.0,
+                room_low: 0.0,
+                lane: boxes[b].lane,
+                pin: Pin::Free,
+                dummy: true,
+                v: 0.0,
+            });
             path.push(vertices.len() - 1);
         }
         path.push(b);
@@ -209,7 +279,7 @@ fn with_dummies(boxes: &[NodeBox], edges: &[(usize, usize)], reversed: &[bool], 
     for rank in &mut by_rank {
         rank.sort_by_key(|&vertex| vertices[vertex].lane);
     }
-    Layered { vertices, ranks: by_rank, hops, chains, lane_bands: Vec::new() }
+    Layered { vertices, ranks: by_rank, hops, chains, lane_bands: Vec::new(), lane_room: Vec::new() }
 }
 
 fn neighbours(layered: &Layered) -> (Vec<Vec<usize>>, Vec<Vec<usize>>) {
@@ -466,7 +536,6 @@ fn isotonic(values: &[f64], weights: &[f64]) -> Vec<f64> {
     blocks.iter().flat_map(|&(weight, sum, count)| std::iter::repeat(sum / weight).take(count)).collect()
 }
 
-const LANE_PADDING: f64 = 24.0;
 const MIN_LANE: f64 = 96.0;
 
 fn stack_extent(layered: &Layered, members: &[usize], node_gap: f64) -> f64 {
@@ -492,26 +561,35 @@ fn lane_bands(layered: &Layered, node_gap: f64) -> Vec<(f64, f64)> {
                 stack_extent(layered, &members, node_gap)
             })
             .fold(0.0, f64::max);
-        let height = snap_up(MIN_LANE.max(tallest + 2.0 * LANE_PADDING));
+        let (before, after) = layered.lane_room[lane];
+        let height = snap_up(MIN_LANE.max(tallest + before + after));
         bands.push((top, top + height));
         top += height;
     }
     bands
 }
 
-fn lane_limits(vertex: &Vertex, band: (f64, f64)) -> (f64, f64) {
-    let low = band.0 + LANE_PADDING + vertex.room_low + vertex.sv / 2.0;
-    let high = band.1 - LANE_PADDING - vertex.sv / 2.0;
+fn inner_band(layered: &Layered, lane: usize) -> (f64, f64) {
+    let (top, bottom) = layered.lane_bands[lane];
+    let (before, after) = layered.lane_room[lane];
+    (top + before, bottom - after)
+}
+
+fn lane_limits(vertex: &Vertex, inner: (f64, f64)) -> (f64, f64) {
+    let low = inner.0 + vertex.room_low + vertex.sv / 2.0;
+    let high = inner.1 - vertex.sv / 2.0;
     (low, high.max(low))
 }
 
-fn place_in_lanes(layered: &mut Layered, node_gap: f64) {
+fn place_in_lanes(layered: &mut Layered, node_gap: f64, room: &[(f64, f64)]) {
+    let lane_count = layered.vertices.iter().map(|vertex| vertex.lane + 1).max().unwrap_or(0);
+    layered.lane_room = (0..lane_count).map(|lane| room.get(lane).copied().unwrap_or_default()).collect();
     layered.lane_bands = lane_bands(layered, node_gap);
     for rank in layered.ranks.clone() {
         for lane in 0..layered.lane_bands.len() {
             let members: Vec<usize> = rank.iter().copied().filter(|&vertex| layered.vertices[vertex].lane == lane).collect();
-            let band = layered.lane_bands[lane];
-            let middle = (band.0 + band.1) / 2.0;
+            let inner = inner_band(layered, lane);
+            let middle = (inner.0 + inner.1) / 2.0;
             let mut v = middle - stack_extent(layered, &members, node_gap) / 2.0;
             for (index, &vertex) in members.iter().enumerate() {
                 v += if index == 0 {
@@ -538,7 +616,7 @@ fn keep_in_lanes(layered: &mut Layered, rank: usize, node_gap: f64) {
     let members = layered.ranks[rank].clone();
     for lane in 0..layered.lane_bands.len() {
         let in_lane: Vec<usize> = members.iter().copied().filter(|&vertex| layered.vertices[vertex].lane == lane).collect();
-        let band = layered.lane_bands[lane];
+        let band = inner_band(layered, lane);
         for (index, &vertex) in in_lane.iter().enumerate() {
             let (low, high) = lane_limits(&layered.vertices[vertex], band);
             let mut v = layered.vertices[vertex].v.clamp(low, high);
@@ -608,8 +686,8 @@ fn free_range(layered: &Layered, position: &[usize], vertex: usize, node_gap: f6
         let below = &layered.vertices[next];
         high = below.v - separation(own, below, node_gap);
     }
-    if let Some(&band) = layered.lane_bands.get(own.lane) {
-        let (lane_low, lane_high) = lane_limits(own, band);
+    if own.lane < layered.lane_bands.len() {
+        let (lane_low, lane_high) = lane_limits(own, inner_band(layered, own.lane));
         low = low.max(lane_low);
         high = high.min(lane_high);
     }
@@ -635,25 +713,25 @@ mod tests {
     use super::*;
 
     fn boxes(count: usize) -> Vec<NodeBox> {
-        vec![NodeBox { su: 120.0, sv: 60.0, room_low: 0.0, lane: 0 }; count]
+        vec![NodeBox { su: 120.0, sv: 60.0, room_low: 0.0, lane: 0, pin: Pin::Free }; count]
     }
 
     #[test]
     fn a_cycle_is_broken_by_reversing_one_edge() {
-        let layered = layer(&boxes(3), &[(0, 1), (1, 2), (2, 0)], 40.0, 8, false);
+        let layered = layer(&boxes(3), &[(0, 1), (1, 2), (2, 0)], 40.0, 8, Bands::default());
         assert_eq!(layered.chains.iter().filter(|chain| chain.reversed).count(), 1);
     }
 
     #[test]
     fn a_long_edge_gets_one_dummy_per_crossed_rank() {
-        let layered = layer(&boxes(3), &[(0, 1), (1, 2), (0, 2)], 40.0, 8, false);
+        let layered = layer(&boxes(3), &[(0, 1), (1, 2), (0, 2)], 40.0, 8, Bands::default());
         assert_eq!(layered.vertices.iter().filter(|vertex| vertex.dummy).count(), 1);
         assert_eq!(layered.chains[2].hops.len(), 2);
     }
 
     #[test]
     fn a_chain_of_single_edges_is_straight() {
-        let layered = layer(&boxes(3), &[(0, 1), (1, 2)], 40.0, 8, false);
+        let layered = layer(&boxes(3), &[(0, 1), (1, 2)], 40.0, 8, Bands::default());
         let v: Vec<f64> = layered.vertices.iter().map(|vertex| vertex.v).collect();
         assert_eq!(v[0], v[1]);
         assert_eq!(v[1], v[2]);
@@ -661,14 +739,42 @@ mod tests {
 
     #[test]
     fn nodes_in_one_rank_keep_their_gap() {
-        let layered = layer(&boxes(3), &[(0, 1), (0, 2)], 40.0, 8, false);
+        let layered = layer(&boxes(3), &[(0, 1), (0, 2)], 40.0, 8, Bands::default());
         let gap = (layered.vertices[1].v - layered.vertices[2].v).abs() - 60.0;
         assert!(gap >= 40.0 - 4.0, "gap was {gap}");
     }
 
     #[test]
+    fn every_tier_owns_its_own_ranks_in_tier_order() {
+        let tiers = [1, 0, 0, 2];
+        let bands = Bands { tiers: Some(&tiers), ..Bands::default() };
+        let layered = layer(&boxes(4), &[(0, 3), (1, 2), (3, 1)], 40.0, 8, bands);
+        let rank: Vec<usize> = layered.vertices.iter().take(4).map(|vertex| vertex.rank).collect();
+        assert_eq!(rank, vec![2, 0, 1, 3]);
+        assert!(layered.chains[2].reversed);
+    }
+
+    #[test]
+    fn a_pinned_node_sits_at_its_end_of_the_rank() {
+        let mut nodes = boxes(4);
+        nodes[1].pin = Pin::High;
+        let layered = layer(&nodes, &[(0, 1), (0, 2), (0, 3)], 40.0, 8, Bands::default());
+        assert_eq!(layered.ranks[1].last(), Some(&1));
+    }
+
+    #[test]
+    fn a_lane_keeps_its_room_free() {
+        let mut nodes = boxes(2);
+        nodes[1].lane = 1;
+        let room = [(24.0, 24.0), (64.0, 24.0)];
+        let layered = layer(&nodes, &[(0, 1)], 40.0, 8, Bands { lane_room: Some(&room), ..Bands::default() });
+        let second = &layered.vertices[1];
+        assert!(second.v - second.sv / 2.0 >= layered.lane_bands[1].0 + 64.0);
+    }
+
+    #[test]
     fn a_long_edge_runs_straight_through_its_dummies() {
-        let layered = layer(&boxes(5), &[(0, 1), (1, 2), (2, 3), (0, 3), (0, 4)], 40.0, 8, false);
+        let layered = layer(&boxes(5), &[(0, 1), (1, 2), (2, 3), (0, 3), (0, 4)], 40.0, 8, Bands::default());
         let dummies: Vec<f64> = layered.vertices.iter().filter(|vertex| vertex.dummy).map(|vertex| vertex.v).collect();
         assert_eq!(dummies.len(), 2);
         assert_eq!(dummies[0], dummies[1]);

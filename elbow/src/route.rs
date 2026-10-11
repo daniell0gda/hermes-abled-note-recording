@@ -228,9 +228,24 @@ fn separate_close_runs(layered: &Layered, from_v: &mut [f64], to_v: &mut [f64]) 
                 to_v[i] = moved_end;
             } else if sole_port_reaches(layered, source.from, source.from_slot, moved_start) {
                 from_v[j] = moved_start;
+            } else if runs_beside(to_v[j], from_v[i]) {
+                let entries: Vec<f64> = (0..layered.hops.len()).filter(|&k| k != i && layered.hops[k].to == target.to).map(|k| to_v[k]).collect();
+                let exits: Vec<f64> = (0..layered.hops.len()).filter(|&k| k != j && layered.hops[k].from == source.from).map(|k| from_v[k]).collect();
+                if port_fits(layered, target.to, moved_end, &entries) {
+                    to_v[i] = moved_end;
+                } else if port_fits(layered, source.from, moved_start, &exits) {
+                    from_v[j] = moved_start;
+                }
             }
         }
     }
+}
+
+/// True when a port of `vertex` can move to `v`: inside the node side and clear of its other ports there.
+fn port_fits(layered: &Layered, vertex: usize, v: f64, others: &[f64]) -> bool {
+    let own = &layered.vertices[vertex];
+    let inside = (v - own.v).abs() <= own.sv / 2.0 - PORT_MARGIN;
+    !own.dummy && inside && others.iter().all(|&other| (other - v).abs() >= CLEARANCE)
 }
 
 fn sole_port_reaches(layered: &Layered, vertex: usize, slot: (usize, usize), v: f64) -> bool {
@@ -378,11 +393,11 @@ fn topological(nodes: &[usize], constraints: &TrackOrder) -> Vec<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::layout::{layer, NodeBox};
+    use crate::layout::{layer, Bands, NodeBox, Pin};
 
     fn routed(edges: &[(usize, usize)], count: usize) -> Routed {
-        let boxes = vec![NodeBox { su: 120.0, sv: 60.0, room_low: 0.0, lane: 0 }; count];
-        let layered = layer(&boxes, edges, 40.0, 8, false);
+        let boxes = vec![NodeBox { su: 120.0, sv: 60.0, room_low: 0.0, lane: 0, pin: Pin::Free }; count];
+        let layered = layer(&boxes, edges, 40.0, 8, Bands::default());
         route(&layered, count, &vec![0.0; edges.len()], Direction::Right, 64.0, 12.0, true)
     }
 
