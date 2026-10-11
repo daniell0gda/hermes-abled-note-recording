@@ -140,9 +140,6 @@ pub fn draw(scene: &Scene, view: &View, theme: Theme, legend: bool) -> String {
     for section in &scene.sections {
         draw_section(&mut out, section, &marking, palette);
     }
-    for figure in &scene.decor {
-        draw_figure(&mut out, figure, None, palette);
-    }
     for lifeline in &scene.lifelines {
         let _ = write!(
             out,
@@ -153,6 +150,9 @@ pub fn draw(scene: &Scene, view: &View, theme: Theme, legend: bool) -> String {
             lifeline.b.y,
             palette.wash
         );
+    }
+    for figure in &scene.decor {
+        draw_figure(&mut out, figure, None, palette);
     }
     let hops = hops(scene);
     let arrows = scene.kind != Kind::Er;
