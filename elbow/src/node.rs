@@ -87,8 +87,9 @@ pub fn tag_width(tag: &str) -> f64 {
 
 pub fn content(spec: &NodeSpec, kind: Kind, links: Links) -> NodeContent {
     let (name, bracket) = name_and_sublabel(&spec.label);
-    let (sublabel, fields) = match (kind, bracket) {
-        (Kind::Er, Some(list)) => (None, field_list(&list)),
+    let lists_fields = matches!(kind, Kind::Er | Kind::UmlClass | Kind::DbSchema | Kind::Medallion);
+    let (sublabel, fields) = match (lists_fields, bracket) {
+        (true, Some(list)) => (None, field_list(&list)),
         (_, bracket) => (bracket, Vec::new()),
     };
     let tag = tag_for(spec.shape, kind);
@@ -107,8 +108,26 @@ pub fn content(spec: &NodeSpec, kind: Kind, links: Links) -> NodeContent {
     node
 }
 
-fn field_list(list: &str) -> Vec<String> {
-    list.split([',', ';']).map(str::trim).filter(|field| !field.is_empty()).map(str::to_string).collect()
+/// The items of a bracket list, split at commas and semicolons outside inner brackets, so
+/// `numeric(12,2)` or `total(a, b)` stay one item.
+pub fn field_list(list: &str) -> Vec<String> {
+    let mut items = Vec::new();
+    let mut depth = 0usize;
+    let mut current = String::new();
+    for c in list.chars() {
+        match c {
+            '(' => depth += 1,
+            ')' => depth = depth.saturating_sub(1),
+            ',' | ';' if depth == 0 => {
+                items.push(std::mem::take(&mut current));
+                continue;
+            }
+            _ => {}
+        }
+        current.push(c);
+    }
+    items.push(current);
+    items.into_iter().map(|item| item.trim().to_string()).filter(|item| !item.is_empty()).collect()
 }
 
 fn name_lines(name: &str) -> Vec<String> {
@@ -121,16 +140,31 @@ fn name_lines(name: &str) -> Vec<String> {
     }
 }
 
-fn name_and_sublabel(label: &str) -> (String, Option<String>) {
+/// Splits `Name (bracket)` into the name and the bracket's content. The bracket is the one the final
+/// `)` closes, so brackets inside it (`total(): Money`) stay part of it.
+pub fn name_and_sublabel(label: &str) -> (String, Option<String>) {
     let trimmed = label.trim();
-    if let (Some(open), true) = (trimmed.rfind(" ("), trimmed.ends_with(')')) {
+    if let Some(open) = trimmed.strip_suffix(')').and_then(matching_open) {
         let name = trimmed[..open].trim();
-        let sub = trimmed[open + 2..trimmed.len() - 1].trim();
-        if !name.is_empty() && !sub.is_empty() {
+        let sub = trimmed[open + 1..trimmed.len() - 1].trim();
+        if !name.is_empty() && !sub.is_empty() && trimmed[..open].ends_with(' ') {
             return (name.to_string(), Some(sub.to_string()));
         }
     }
     (trimmed.to_string(), None)
+}
+
+fn matching_open(before_close: &str) -> Option<usize> {
+    let mut depth = 0usize;
+    for (index, c) in before_close.char_indices().rev() {
+        match c {
+            ')' => depth += 1,
+            '(' if depth == 0 => return Some(index),
+            '(' => depth -= 1,
+            _ => {}
+        }
+    }
+    None
 }
 
 fn tag_for(shape: Shape, kind: Kind) -> Option<&'static str> {
@@ -179,6 +213,16 @@ mod tests {
         assert_eq!(node.lines, vec!["Users DB".to_string()]);
         assert_eq!(node.sublabel.as_deref(), Some("Postgres"));
         assert_eq!(node.tag, Some("DB"));
+    }
+
+    #[test]
+    fn a_bracket_with_inner_brackets_stays_one_sublabel() {
+        assert_eq!(
+            name_and_sublabel("Order (+ id: UUID, + total(): Money)"),
+            ("Order".to_string(), Some("+ id: UUID, + total(): Money".to_string()))
+        );
+        assert_eq!(name_and_sublabel("total()"), ("total()".to_string(), None));
+        assert_eq!(field_list("id uuid PK, amount numeric(12,2); note"), vec!["id uuid PK", "amount numeric(12,2)", "note"]);
     }
 
     #[test]

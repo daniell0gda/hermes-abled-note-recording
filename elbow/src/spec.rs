@@ -3,7 +3,7 @@
 use serde::Deserialize;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "kebab-case")]
 pub enum Kind {
     #[default]
     Flow,
@@ -15,6 +15,23 @@ pub enum Kind {
     Nested,
     Layers,
     Dependency,
+    Timeline,
+    Process,
+    Loop,
+    Pyramid,
+    Funnel,
+    Venn,
+    Fishbone,
+    Kanban,
+    Journey,
+    StoryMap,
+    UmlClass,
+    Deployment,
+    Medallion,
+    OrgChart,
+    DbSchema,
+    Quadrant,
+    Wardley,
 }
 
 impl Kind {
@@ -29,7 +46,42 @@ impl Kind {
             Kind::Nested => "nested",
             Kind::Layers => "layers",
             Kind::Dependency => "dependency",
+            Kind::Timeline => "timeline",
+            Kind::Process => "process",
+            Kind::Loop => "loop",
+            Kind::Pyramid => "pyramid",
+            Kind::Funnel => "funnel",
+            Kind::Venn => "venn",
+            Kind::Fishbone => "fishbone",
+            Kind::Kanban => "kanban",
+            Kind::Journey => "journey",
+            Kind::StoryMap => "story-map",
+            Kind::UmlClass => "uml-class",
+            Kind::Deployment => "deployment",
+            Kind::Medallion => "medallion",
+            Kind::OrgChart => "org-chart",
+            Kind::DbSchema => "db-schema",
+            Kind::Quadrant => "quadrant",
+            Kind::Wardley => "wardley",
         }
+    }
+
+    /// True for the kinds a module of their own lays out, outside the layered layout.
+    pub fn is_figurative(self) -> bool {
+        matches!(
+            self,
+            Kind::Timeline
+                | Kind::Loop
+                | Kind::Pyramid
+                | Kind::Funnel
+                | Kind::Venn
+                | Kind::Fishbone
+                | Kind::Kanban
+                | Kind::Journey
+                | Kind::StoryMap
+                | Kind::Quadrant
+                | Kind::Wardley
+        )
     }
 }
 

@@ -8,6 +8,13 @@ $python = Join-Path $root '.venv\Scripts\python.exe'
 $build = Join-Path $root 'build'
 $dist = Join-Path $root $DistRoot
 $app = Join-Path $dist 'ListeningApp'
+$elbow = Join-Path $root 'elbow'
+$vcvars = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat'
+
+# elbow, the Rust diagram renderer, is bundled as elbow\elbow.exe; cargo needs the MSVC linker environment.
+$cargo = "cargo build --release --manifest-path `"$elbow\Cargo.toml`""
+if (Test-Path $vcvars) { cmd /s /c "`"$vcvars`" >nul 2>&1 && $cargo" } else { cmd /s /c $cargo }
+if ($LASTEXITCODE -ne 0) { throw "Building elbow failed with exit code $LASTEXITCODE" }
 
 & $python -m PyInstaller `
     --noconfirm --clean --onedir --noconsole `
@@ -17,6 +24,7 @@ $app = Join-Path $dist 'ListeningApp'
     --specpath $build `
     --add-data "$root\listening_app\assets;listening_app\assets" `
     --add-data "$root\config.example.yaml;." `
+    --add-binary "$elbow\target\release\elbow.exe;elbow" `
     --collect-data litellm `
     --copy-metadata litellm `
     --hidden-import tiktoken_ext.openai_public `

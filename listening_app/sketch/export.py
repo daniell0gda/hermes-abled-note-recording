@@ -32,11 +32,22 @@ def file_name(number: int, title: str) -> str:
     return f"{number:02d}-{slug}.html"
 
 
+def drawing(view: dict[str, Any], title: str) -> str:
+    """Elbow's SVG when the view carries it, else an empty SVG that the bundled renderer draws `view` into."""
+    if "svg" in view:
+        return f'<main class="sk-canvas">{view["svg"]}</main>'
+    return f"""<main class="sk-canvas"><svg id="sketch" role="img" aria-label="{title}"></svg></main>
+<script>{asset("dagre.min.js")}</script>
+<script>{asset("sketch.js")}</script>
+<script>SketchRenderer.render(document.getElementById("sketch"), {script_json(view)});</script>"""
+
+
 def diagram_page(view: dict[str, Any]) -> str:
     """A standalone page that draws `view`. Only the web fonts are loaded from the internet, with local fallbacks."""
     title = html.escape(view["title"] or f"Diagram {view['number']}")
+    theme = f' data-theme="{html.escape(view["theme"])}"' if "theme" in view else ""
     return f"""<!doctype html>
-<html lang="en">
+<html lang="en"{theme}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -48,11 +59,8 @@ def diagram_page(view: dict[str, Any]) -> str:
 <div class="sk-page">
 <header class="sk-header"><div class="sk-eyebrow-title">Diagram {view["number"]} · {html.escape(view["kind"])}</div>
 <h1 class="sk-title">{title}</h1></header>
-<main class="sk-canvas"><svg id="sketch" role="img" aria-label="{title}"></svg></main>
+{drawing(view, title)}
 </div>
-<script>{asset("dagre.min.js")}</script>
-<script>{asset("sketch.js")}</script>
-<script>SketchRenderer.render(document.getElementById("sketch"), {script_json(view)});</script>
 </body>
 </html>
 """

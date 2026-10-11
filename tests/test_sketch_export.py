@@ -44,6 +44,17 @@ def test_text_from_the_speaker_cannot_break_out_of_the_page() -> None:
     assert embedded_view(page)["nodes"][0]["label"] == "</script><script>alert(1)</script>"
 
 
+def test_a_view_elbow_drew_is_embedded_as_its_svg_without_the_renderer_scripts() -> None:
+    svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><g class="sk-node" data-id="auth"></g></svg>'
+
+    page = diagram_page({**view(), "svg": svg, "theme": "dark"})
+
+    assert f'<main class="sk-canvas">{svg}</main>' in page
+    assert '<html lang="en" data-theme="dark">' in page
+    assert "SketchRenderer" not in page
+    assert "dagre" not in page
+
+
 def test_every_update_rewrites_the_diagrams_file(tmp_path: Path) -> None:
     files = DiagramFiles(tmp_path / "diagrams" / "session")
 

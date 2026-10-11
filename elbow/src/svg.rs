@@ -3,6 +3,7 @@
 use std::fmt::Write;
 
 use crate::cardinality::MARK_SIZE;
+use crate::figure::{Anchor, Figure, Font, LegendKey, Marker, Paint, Section, Swatch, Text, Tone};
 use crate::geom::{segments, Point, Rect, Segment};
 use crate::label::{LABEL_SIZE, LABEL_TRACKING};
 use crate::node::{
@@ -10,7 +11,7 @@ use crate::node::{
 };
 use crate::params::Theme;
 use crate::rings::{Ring, RING_LABEL_PADDING, RING_LABEL_SIZE, RING_LABEL_TRACKING};
-use crate::scene::{Lane, Scene, SceneEdge, SceneNode, Zone, LANE_LABEL_SIZE, LANE_LABEL_TRACKING, MARGIN};
+use crate::scene::{Bend, Lane, Scene, SceneEdge, SceneNode, Zone, LANE_LABEL_SIZE, LANE_LABEL_TRACKING, MARGIN};
 use crate::spec::{EdgeStyle, Kind, View};
 use crate::text::mono_width;
 
@@ -40,6 +41,7 @@ struct Palette {
     point: &'static str,
     wash: &'static str,
     muted_wash: &'static str,
+    accent_wash: &'static str,
 }
 
 const LIGHT: Palette = Palette {
@@ -54,6 +56,7 @@ const LIGHT: Palette = Palette {
     point: "rgba(46,90,168,0.12)",
     wash: "45,49,66",
     muted_wash: "79,93,117",
+    accent_wash: "235,108,54",
 };
 
 const DARK: Palette = Palette {
@@ -68,6 +71,7 @@ const DARK: Palette = Palette {
     point: "rgba(106,149,216,0.18)",
     wash: "245,245,245",
     muted_wash: "191,192,192",
+    accent_wash: "240,138,89",
 };
 
 /// The elements the viewer selected and the one pointed at, as the view gave them.
@@ -94,7 +98,7 @@ struct BoxLook {
 }
 
 struct LineLook {
-    stroke: &'static str,
+    stroke: String,
     marker: &'static str,
     dash: Option<&'static str>,
     width: f64,
@@ -133,6 +137,12 @@ pub fn draw(scene: &Scene, view: &View, theme: Theme, legend: bool) -> String {
     for ring in &scene.rings {
         draw_ring(&mut out, ring, &marking, palette);
     }
+    for section in &scene.sections {
+        draw_section(&mut out, section, &marking, palette);
+    }
+    for figure in &scene.decor {
+        draw_figure(&mut out, figure, None, palette);
+    }
     for lifeline in &scene.lifelines {
         let _ = write!(
             out,
@@ -157,6 +167,9 @@ pub fn draw(scene: &Scene, view: &View, theme: Theme, legend: bool) -> String {
         let _ = write!(out, r#"<g class="sk-node{}" data-id="{}">"#, marking.classes(&node.id), escape(&node.id));
         draw_node(&mut out, node, palette);
         out.push_str("</g>");
+    }
+    for figure in &scene.overlay {
+        draw_figure(&mut out, figure, None, palette);
     }
     if !legend_items.is_empty() {
         draw_legend(&mut out, &legend_items, scene.height, width, palette);
@@ -189,12 +202,29 @@ pub fn escape(text: &str) -> String {
 
 fn markers(out: &mut String, palette: &Palette) {
     out.push_str("<defs>");
-    for (id, fill) in [("arrow", palette.muted), ("arrow-accent", palette.accent), ("arrow-link", palette.link)] {
+    for (id, fill) in [("arrow", palette.muted), ("arrow-accent", palette.accent), ("arrow-link", palette.link), ("arrow-ink", palette.ink)] {
         let _ = write!(
             out,
             r#"<marker id="{id}" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="{fill}"/></marker>"#
         );
     }
+    let (paper, ink) = (palette.paper, palette.ink);
+    let _ = write!(
+        out,
+        r#"<marker id="uml-triangle" markerWidth="14" markerHeight="12" refX="13" refY="6" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><polygon points="1 1, 13 6, 1 11" fill="{paper}" stroke="{ink}" stroke-width="1"/></marker>"#
+    );
+    let _ = write!(
+        out,
+        r#"<marker id="uml-diamond" markerWidth="18" markerHeight="10" refX="17" refY="5" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><polygon points="1 5, 9 1, 17 5, 9 9" fill="{ink}" stroke="{ink}" stroke-width="1"/></marker>"#
+    );
+    let _ = write!(
+        out,
+        r#"<marker id="uml-diamond-open" markerWidth="18" markerHeight="10" refX="17" refY="5" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><polygon points="1 5, 9 1, 17 5, 9 9" fill="{paper}" stroke="{ink}" stroke-width="1"/></marker>"#
+    );
+    let _ = write!(
+        out,
+        r#"<marker id="uml-open" markerWidth="12" markerHeight="12" refX="11" refY="6" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><polyline points="1 1, 11 6, 1 11" fill="none" stroke="{ink}" stroke-width="1"/></marker>"#
+    );
     out.push_str("</defs>");
 }
 
@@ -214,27 +244,153 @@ fn marking_style(out: &mut String, palette: &Palette) {
 }
 
 fn line_look(style: EdgeStyle, palette: &Palette) -> LineLook {
-    match style {
-        EdgeStyle::Sync => LineLook { stroke: palette.link, marker: "arrow-link", dash: None, width: 1.2 },
-        EdgeStyle::Async => LineLook { stroke: palette.muted, marker: "arrow", dash: Some("5,4"), width: 1.2 },
-        EdgeStyle::Data | EdgeStyle::Transition => LineLook { stroke: palette.muted, marker: "arrow", dash: None, width: 1.2 },
-        EdgeStyle::Dependency => LineLook { stroke: palette.muted, marker: "arrow", dash: Some("4,3"), width: 1.0 },
-    }
+    let (stroke, marker, dash, width) = match style {
+        EdgeStyle::Sync => (palette.link, "arrow-link", None, 1.2),
+        EdgeStyle::Async => (palette.muted, "arrow", Some("5,4"), 1.2),
+        EdgeStyle::Data | EdgeStyle::Transition => (palette.muted, "arrow", None, 1.2),
+        EdgeStyle::Dependency => (palette.muted, "arrow", Some("4,3"), 1.0),
+    };
+    LineLook { stroke: stroke.to_string(), marker, dash, width }
 }
 
 fn cycle_look(palette: &Palette) -> LineLook {
-    LineLook { stroke: palette.accent, marker: "arrow-accent", dash: Some("5,4"), width: 1.2 }
+    LineLook { stroke: palette.accent.to_string(), marker: "arrow-accent", dash: Some("5,4"), width: 1.2 }
+}
+
+fn paint_look(paint: &Paint, palette: &Palette) -> LineLook {
+    LineLook { stroke: color(paint.stroke, palette), marker: arrow_for(paint.stroke), dash: paint.dash, width: paint.width }
 }
 
 fn edge_look(edge: &SceneEdge, palette: &Palette) -> LineLook {
+    if let Some(paint) = &edge.paint {
+        return paint_look(paint, palette);
+    }
     let look = line_look(edge.style, palette);
     if edge.cycle {
         cycle_look(palette)
     } else if edge.focal {
-        LineLook { stroke: palette.accent, marker: "arrow-accent", width: FOCAL_LINE_WIDTH, ..look }
+        LineLook { stroke: palette.accent.to_string(), marker: "arrow-accent", width: FOCAL_LINE_WIDTH, ..look }
     } else {
         look
     }
+}
+
+fn arrow_for(tone: Tone) -> &'static str {
+    match tone {
+        Tone::Accent | Tone::AccentWash(_) => "arrow-accent",
+        Tone::Link => "arrow-link",
+        Tone::Ink => "arrow-ink",
+        _ => "arrow",
+    }
+}
+
+fn marker_id(marker: Marker, arrow: &'static str) -> Option<&'static str> {
+    match marker {
+        Marker::None => None,
+        Marker::Arrow => Some(arrow),
+        Marker::Triangle => Some("uml-triangle"),
+        Marker::Diamond => Some("uml-diamond"),
+        Marker::HollowDiamond => Some("uml-diamond-open"),
+        Marker::Open => Some("uml-open"),
+    }
+}
+
+fn marker_attributes(start: Marker, end: Marker, arrow: &'static str) -> String {
+    let start = marker_id(start, arrow).map(|id| format!(r#" marker-start="url(#{id})""#)).unwrap_or_default();
+    let end = marker_id(end, arrow).map(|id| format!(r#" marker-end="url(#{id})""#)).unwrap_or_default();
+    format!("{start}{end}")
+}
+
+fn color(tone: Tone, palette: &Palette) -> String {
+    match tone {
+        Tone::None => "none".to_string(),
+        Tone::Transparent => "transparent".to_string(),
+        Tone::Paper => palette.paper.to_string(),
+        Tone::Fill => palette.box_fill.to_string(),
+        Tone::Ink => palette.ink.to_string(),
+        Tone::Muted => palette.muted.to_string(),
+        Tone::Soft => palette.soft.to_string(),
+        Tone::Accent => palette.accent.to_string(),
+        Tone::AccentTint => palette.accent_tint.to_string(),
+        Tone::Link => palette.link.to_string(),
+        Tone::Wash(alpha) => format!("rgba({},{alpha})", palette.wash),
+        Tone::MutedWash(alpha) => format!("rgba({},{alpha})", palette.muted_wash),
+        Tone::AccentWash(alpha) => format!("rgba({},{alpha})", palette.accent_wash),
+    }
+}
+
+fn paint_style(paint: &Paint, palette: &Palette) -> String {
+    let dash = paint.dash.map(|dash| format!(";stroke-dasharray:{dash}")).unwrap_or_default();
+    format!("fill:{};stroke:{};stroke-width:{}{dash}", color(paint.fill, palette), color(paint.stroke, palette), paint.width)
+}
+
+fn class_attribute(class: Option<&str>) -> String {
+    class.map(|class| format!(r#" class="{class}""#)).unwrap_or_default()
+}
+
+fn point_list(points: &[Point]) -> String {
+    points.iter().map(|point| format!("{},{}", point.x, point.y)).collect::<Vec<_>>().join(" ")
+}
+
+/// Writes one figure; `class` marks the shape of a node or section (`sk-shape`).
+fn draw_figure(out: &mut String, figure: &Figure, class: Option<&str>, palette: &Palette) {
+    let class = class_attribute(class);
+    match figure {
+        Figure::Rect { rect, radius, paint } => {
+            let _ = write!(
+                out,
+                r#"<rect{class} x="{}" y="{}" width="{}" height="{}" rx="{radius}" style="{}"/>"#,
+                rect.x,
+                rect.y,
+                rect.w,
+                rect.h,
+                paint_style(paint, palette)
+            );
+        }
+        Figure::Circle { centre, radius, paint } => {
+            let _ = write!(out, r#"<circle{class} cx="{}" cy="{}" r="{radius}" style="{}"/>"#, centre.x, centre.y, paint_style(paint, palette));
+        }
+        Figure::Polygon { points, paint } => {
+            let _ = write!(out, r#"<polygon{class} points="{}" style="{}"/>"#, point_list(points), paint_style(paint, palette));
+        }
+        Figure::Line { points, paint, end } => {
+            let markers = marker_attributes(Marker::None, *end, arrow_for(paint.stroke));
+            let _ = write!(out, r#"<polyline{class} points="{}" style="{}"{markers}/>"#, point_list(points), paint_style(paint, palette));
+        }
+        Figure::Text(text) => draw_text(out, text, palette),
+    }
+}
+
+fn draw_text(out: &mut String, text: &Text, palette: &Palette) {
+    let family = match text.font {
+        Font::Sans => SANS,
+        Font::Mono => MONO,
+    };
+    let anchor = match text.anchor {
+        Anchor::Start => "start",
+        Anchor::Middle => "middle",
+        Anchor::End => "end",
+    };
+    let tracking = if text.tracking > 0.0 { format!(r#" letter-spacing="{}em""#, text.tracking) } else { String::new() };
+    let italic = if text.italic { r#" font-style="italic""# } else { "" };
+    let _ = write!(
+        out,
+        r#"<text x="{}" y="{}" fill="{}" font-size="{}" font-weight="{}" font-family="{family}" text-anchor="{anchor}"{tracking}{italic}>{}</text>"#,
+        text.at.x,
+        text.at.y,
+        color(text.tone, palette),
+        text.size,
+        text.weight,
+        escape(&text.text)
+    );
+}
+
+fn draw_section(out: &mut String, section: &Section, marking: &Marking, palette: &Palette) {
+    let opened = open_section(out, &section.id, marking);
+    for (index, figure) in section.figures.iter().enumerate() {
+        draw_figure(out, figure, (index == 0 && opened).then_some("sk-shape"), palette);
+    }
+    close_section(out, opened);
 }
 
 fn box_look(treatment: Treatment, palette: &Palette) -> BoxLook {
@@ -255,7 +411,8 @@ fn dash_attribute(dash: Option<&str>) -> String {
 }
 
 fn hops(scene: &Scene) -> Vec<Vec<Vec<f64>>> {
-    let runs: Vec<Vec<Segment>> = scene.edges.iter().map(|edge| segments(&edge.points)).collect();
+    let runs: Vec<Vec<Segment>> =
+        scene.edges.iter().map(|edge| if edge.is_elbow() { segments(&edge.points) } else { Vec::new() }).collect();
     runs.iter()
         .enumerate()
         .map(|(index, own)| {
@@ -283,8 +440,13 @@ fn hops(scene: &Scene) -> Vec<Vec<Vec<f64>>> {
 
 fn draw_edge(out: &mut String, edge: &SceneEdge, hops: &[Vec<f64>], arrow: bool, palette: &Palette) {
     let look = edge_look(edge, palette);
-    let marker = if arrow { format!(r#" marker-end="url(#{})""#, look.marker) } else { String::new() };
-    let data = path_data(&edge.points, hops);
+    let (start, end) = edge.markers.unwrap_or((Marker::None, if arrow { Marker::Arrow } else { Marker::None }));
+    let marker = marker_attributes(start, end, look.marker);
+    let data = match edge.bend {
+        Bend::Elbow => path_data(&edge.points, hops),
+        Bend::Free => free_path(&edge.points),
+        Bend::Arc { radius, clockwise } => arc_path(&edge.points, radius, clockwise),
+    };
     let _ = write!(out, r#"<path class="sk-hit" d="{data}" fill="none" stroke="transparent" stroke-width="{HIT_WIDTH}"/>"#);
     let _ = write!(
         out,
@@ -339,6 +501,19 @@ fn path_data(points: &[Point], hops: &[Vec<f64>]) -> String {
         }
     }
     data
+}
+
+fn free_path(points: &[Point]) -> String {
+    let mut data = String::new();
+    for (index, point) in points.iter().enumerate() {
+        let _ = write!(data, "{}{},{}", if index == 0 { "M" } else { " L" }, point.x, point.y);
+    }
+    data
+}
+
+fn arc_path(points: &[Point], radius: f64, clockwise: bool) -> String {
+    let (Some(first), Some(last)) = (points.first(), points.last()) else { return String::new() };
+    format!("M{},{} A{radius},{radius} 0 0,{} {},{}", first.x, first.y, u8::from(clockwise), last.x, last.y)
 }
 
 fn hops_in_travel_order(hops: Option<&Vec<f64>>, heading: f64) -> Vec<f64> {
@@ -440,15 +615,40 @@ fn draw_fields(out: &mut String, node: &SceneNode, palette: &Palette) {
     }
 }
 
-fn draw_node(out: &mut String, node: &SceneNode, palette: &Palette) {
-    let rect = node.rect;
-    let look = box_look(node.content.treatment, palette);
+fn draw_halo(out: &mut String, rect: &Rect, palette: &Palette) {
     let halo = rect.inflate(HALO);
     let _ = write!(
         out,
         r#"<rect class="sk-halo" x="{}" y="{}" width="{}" height="{}" rx="10" fill="{}" pointer-events="none"/>"#,
         halo.x, halo.y, halo.w, halo.h, palette.point
     );
+}
+
+fn draw_outline(out: &mut String, rect: &Rect, palette: &Palette) {
+    let outline = rect.inflate(OUTLINE);
+    let _ = write!(
+        out,
+        r#"<rect class="sk-outline" x="{}" y="{}" width="{}" height="{}" rx="8" fill="none" stroke="{}" stroke-width="2" pointer-events="none"/>"#,
+        outline.x, outline.y, outline.w, outline.h, palette.link
+    );
+}
+
+fn draw_figured_node(out: &mut String, node: &SceneNode, palette: &Palette) {
+    draw_halo(out, &node.rect, palette);
+    for (index, figure) in node.figures.iter().enumerate() {
+        draw_figure(out, figure, (index == 0).then_some("sk-shape"), palette);
+    }
+    draw_outline(out, &node.rect, palette);
+}
+
+fn draw_node(out: &mut String, node: &SceneNode, palette: &Palette) {
+    if !node.figures.is_empty() {
+        draw_figured_node(out, node, palette);
+        return;
+    }
+    let rect = node.rect;
+    let look = box_look(node.content.treatment, palette);
+    draw_halo(out, &rect, palette);
     let _ = write!(out, r#"<rect x="{}" y="{}" width="{}" height="{}" rx="6" fill="{}"/>"#, rect.x, rect.y, rect.w, rect.h, palette.paper);
     let _ = write!(
         out,
@@ -496,12 +696,7 @@ fn draw_node(out: &mut String, node: &SceneNode, palette: &Palette) {
             escape(sub)
         );
     }
-    let outline = rect.inflate(OUTLINE);
-    let _ = write!(
-        out,
-        r#"<rect class="sk-outline" x="{}" y="{}" width="{}" height="{}" rx="8" fill="none" stroke="{}" stroke-width="2" pointer-events="none"/>"#,
-        outline.x, outline.y, outline.w, outline.h, palette.link
-    );
+    draw_outline(out, &rect, palette);
 }
 
 /// The fill and stroke of a section's area.
@@ -670,25 +865,31 @@ fn draw_zone(out: &mut String, zone: &Zone, marking: &Marking, palette: &Palette
 enum LegendItem {
     Box(Treatment, &'static str),
     Line(LineLook, &'static str),
+    Key(LegendKey),
 }
 
 impl LegendItem {
-    fn text(&self) -> &'static str {
+    fn text(&self) -> &str {
         match self {
             LegendItem::Box(_, text) | LegendItem::Line(_, text) => text,
+            LegendItem::Key(key) => &key.text,
         }
     }
 
     fn width(&self) -> f64 {
         let swatch = match self {
-            LegendItem::Box(..) => 14.0,
-            LegendItem::Line(..) => 28.0,
+            LegendItem::Box(..) | LegendItem::Key(LegendKey { swatch: Swatch::Box(_), .. }) => 14.0,
+            LegendItem::Key(LegendKey { swatch: Swatch::Dot(_), .. }) => 10.0,
+            LegendItem::Line(..) | LegendItem::Key(LegendKey { swatch: Swatch::Line(..), .. }) => 28.0,
         };
         swatch + 8.0 + mono_width(self.text(), 8.0, 0.1) + 28.0
     }
 }
 
 fn legend_items(scene: &Scene, palette: &Palette) -> Vec<LegendItem> {
+    if let Some(keys) = &scene.legend {
+        return keys.iter().cloned().map(LegendItem::Key).collect();
+    }
     let boxes = [
         (Treatment::Focal, "FOCUS"),
         (Treatment::Service, "SERVICE"),
@@ -763,6 +964,7 @@ fn draw_legend(out: &mut String, items: &[LegendItem], top: f64, width: f64, pal
                 );
                 x + 36.0
             }
+            LegendItem::Key(key) => draw_key_swatch(out, &key.swatch, x, row_y, palette),
         };
         let _ = write!(
             out,
@@ -772,6 +974,29 @@ fn draw_legend(out: &mut String, items: &[LegendItem], top: f64, width: f64, pal
             item.text()
         );
         x += item.width();
+    }
+}
+
+fn draw_key_swatch(out: &mut String, swatch: &Swatch, x: f64, row_y: f64, palette: &Palette) -> f64 {
+    match swatch {
+        Swatch::Box(paint) => {
+            let _ = write!(out, r#"<rect x="{x}" y="{}" width="14" height="10" rx="2" style="{}"/>"#, row_y - 5.0, paint_style(paint, palette));
+            x + 22.0
+        }
+        Swatch::Dot(paint) => {
+            let _ = write!(out, r#"<circle cx="{}" cy="{row_y}" r="4" style="{}"/>"#, x + 5.0, paint_style(paint, palette));
+            x + 18.0
+        }
+        Swatch::Line(paint, marker) => {
+            let markers = marker_attributes(Marker::None, *marker, arrow_for(paint.stroke));
+            let _ = write!(
+                out,
+                r#"<line x1="{x}" y1="{row_y}" x2="{}" y2="{row_y}" style="{}"{markers}/>"#,
+                x + 26.0,
+                paint_style(&Paint { fill: Tone::None, ..*paint }, palette)
+            );
+            x + 36.0
+        }
     }
 }
 

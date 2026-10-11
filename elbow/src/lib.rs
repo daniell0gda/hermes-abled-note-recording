@@ -4,7 +4,9 @@
 mod cardinality;
 mod check;
 mod cycle;
+mod figure;
 mod geom;
+mod kinds;
 mod label;
 mod layout;
 mod node;
@@ -108,7 +110,7 @@ svg {{ display: block; max-width: 100%; height: auto; }}
 mod tests {
     use super::*;
 
-    const REFERENCES: [(&str, &str); 10] = [
+    const REFERENCES: [(&str, &str); 27] = [
         ("backend", include_str!("../tests/backend.json")),
         ("hiring", include_str!("../tests/hiring.json")),
         ("issue", include_str!("../tests/issue.json")),
@@ -119,7 +121,34 @@ mod tests {
         ("nested", include_str!("../tests/nested.json")),
         ("layers", include_str!("../tests/layers.json")),
         ("dependency", include_str!("../tests/dependency.json")),
+        ("timeline", include_str!("../tests/timeline.json")),
+        ("process", include_str!("../tests/process.json")),
+        ("loop", include_str!("../tests/loop.json")),
+        ("pyramid", include_str!("../tests/pyramid.json")),
+        ("funnel", include_str!("../tests/funnel.json")),
+        ("venn", include_str!("../tests/venn.json")),
+        ("fishbone", include_str!("../tests/fishbone.json")),
+        ("kanban", include_str!("../tests/kanban.json")),
+        ("journey", include_str!("../tests/journey.json")),
+        ("story-map", include_str!("../tests/story-map.json")),
+        ("uml-class", include_str!("../tests/uml-class.json")),
+        ("deployment", include_str!("../tests/deployment.json")),
+        ("medallion", include_str!("../tests/medallion.json")),
+        ("org-chart", include_str!("../tests/org-chart.json")),
+        ("db-schema", include_str!("../tests/db-schema.json")),
+        ("quadrant", include_str!("../tests/quadrant.json")),
+        ("wardley", include_str!("../tests/wardley.json")),
     ];
+
+    /// False for the kinds whose diagram-design type has no connectors: their view edges are not drawn.
+    fn draws_edges(kind: Kind) -> bool {
+        !matches!(kind, Kind::Timeline | Kind::Pyramid | Kind::Funnel | Kind::Venn | Kind::Kanban | Kind::StoryMap | Kind::Quadrant)
+    }
+
+    /// False for the kinds that derive their accent instead of following an edge's focal flag.
+    fn accents_focal_edges(kind: Kind) -> bool {
+        draws_edges(kind) && !matches!(kind, Kind::Dependency | Kind::Journey | Kind::UmlClass | Kind::DbSchema | Kind::Wardley)
+    }
 
     fn view(json: &str) -> View {
         serde_json::from_str(json).expect("fixture parses")
@@ -174,7 +203,7 @@ mod tests {
     #[test]
     fn a_focal_edge_is_drawn_in_the_accent_colour() {
         let accent_lines = |view: &View| render(view, &Params::default()).svg.matches("stroke:#eb6c36;stroke-width:1.4").count();
-        for (name, json) in REFERENCES.into_iter().filter(|(name, _)| *name != "dependency") {
+        for (name, json) in REFERENCES.into_iter().filter(|(_, json)| accents_focal_edges(view(json).kind)) {
             let mut focused = view(json);
             focused.edges[0].focal = true;
             assert_eq!(accent_lines(&focused), 1, "{name}");
@@ -248,13 +277,14 @@ mod tests {
                 let group = format!(r#"<g class="sk-node" data-id="{}"><rect class="sk-halo""#, node.id);
                 assert!(svg.contains(&group), "{name}: node {}", node.id);
             }
-            for edge in &reference.edges {
+            let drawn_edges: Vec<_> = reference.edges.iter().filter(|_| draws_edges(reference.kind)).collect();
+            for edge in &drawn_edges {
                 let group = format!(r#"<g class="sk-edge" data-id="{}"><path class="sk-hit""#, svg::escape(&edge.id));
                 assert!(svg.contains(&group), "{name}: edge {}", edge.id);
             }
             let sections = svg.matches(r#"<g class="sk-group""#).count();
             assert_eq!(svg.matches(r#"class="sk-shape""#).count(), reference.nodes.len() + sections, "{name}");
-            assert_eq!(svg.matches(r#"class="sk-line""#).count(), reference.edges.len(), "{name}");
+            assert_eq!(svg.matches(r#"class="sk-line""#).count(), drawn_edges.len(), "{name}");
             assert_eq!(svg.matches(r#"class="sk-outline""#).count(), reference.nodes.len(), "{name}");
         }
     }
@@ -271,14 +301,16 @@ mod tests {
                 .map(|zone| zone.id.clone())
                 .chain(scene.rings.iter().map(|ring| ring.id.clone()))
                 .chain(scene.lanes.iter().map(|lane| lane.id.clone()).filter(|id| !id.is_empty()))
+                .chain(scene.sections.iter().map(|section| section.id.clone()).filter(|id| !id.is_empty()))
                 .collect();
             let Some(first) = ids.first().cloned() else { continue };
             kinds_with_sections += 1;
             marked.selected = vec![first.clone()];
             let svg = render(&marked, &Params::default()).svg;
             for id in ids.iter().skip(1) {
-                let section = format!(r#"<g class="sk-group" data-id="{id}"><rect class="sk-shape""#);
-                assert!(svg.contains(&section), "{name}: section {id}");
+                let opening = format!(r#"<g class="sk-group" data-id="{id}">"#);
+                let shape_first = svg.split(&opening).nth(1).and_then(|rest| rest.split('>').next()).is_some_and(|tag| tag.contains(r#"class="sk-shape""#));
+                assert!(shape_first, "{name}: section {id}");
             }
             assert!(svg.contains(&format!(r#"<g class="sk-group is-selected" data-id="{first}">"#)), "{name}");
         }

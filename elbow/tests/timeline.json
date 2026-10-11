@@ -1,0 +1,21 @@
+{
+ "number": 1,
+ "title": "How the payments platform grew",
+ "kind": "timeline",
+ "nodes": [
+  {"id": "prototype", "label": "First prototype (2019)", "shape": "service", "focal": false},
+  {"id": "pilot", "label": "Pilot with two shops (2020 Q2)", "shape": "service", "focal": false},
+  {"id": "seed", "label": "Seed round (2020 Q4)", "shape": "service", "focal": false},
+  {"id": "launch", "label": "Public launch (2021 Q3)", "shape": "service", "focal": true},
+  {"id": "eu", "label": "EU expansion (2022 Q2)", "shape": "service", "focal": false},
+  {"id": "outage", "label": "Black Friday outage (Nov 2022)", "shape": "service", "focal": false},
+  {"id": "ledger", "label": "Ledger rewrite (2024)", "shape": "service", "focal": false}
+ ],
+ "edges": [],
+ "groups": [
+  {"id": "build", "label": "Build", "members": ["prototype", "pilot", "seed"]},
+  {"id": "scale", "label": "Scale", "members": ["launch", "eu", "outage", "ledger"]}
+ ],
+ "selected": [],
+ "pointed": null
+}

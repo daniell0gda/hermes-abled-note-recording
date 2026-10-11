@@ -181,7 +181,7 @@ class SketchPipeline:
             self._recent.append(line.text)
             overview, judge = self._diagrams.overview(), self._judge
         routing = self._routing(judge, line.text, list(previous), overview)
-        destination = routing.destination(bool(overview.summaries)) if routing is not None else Destination.by_drawer()
+        destination = routing.destination(overview.active) if routing is not None else Destination.by_drawer()
         log.debug("Live sketch routed %r to %s", line.text, destination)
         if destination is None:
             self._switch(routing.switches_to(overview.active) if routing is not None else None)

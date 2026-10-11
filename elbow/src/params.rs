@@ -51,7 +51,7 @@ impl Default for Params {
 impl Params {
     pub fn direction_for(&self, kind: Kind) -> Direction {
         self.direction.unwrap_or(match kind {
-            Kind::Tree | Kind::Layers | Kind::Dependency => Direction::Down,
+            Kind::Tree | Kind::Layers | Kind::Dependency | Kind::OrgChart | Kind::UmlClass => Direction::Down,
             _ => Direction::Right,
         })
     }

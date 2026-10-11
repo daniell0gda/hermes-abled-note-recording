@@ -24,7 +24,9 @@ STRUCTURAL = Routing(structural=0.93, new_requested=0.02, target=1, confidence=0
 FIRST = Routing(structural=0.93, new_requested=0.02, target=None, confidence=1.0, kind=DiagramKind.FLOW)
 CHATTER = Routing(structural=0.02, new_requested=0.02, target=1, confidence=0.9, kind=DiagramKind.FLOW)
 NEW_REQUEST = Routing(structural=0.2, new_requested=0.96, target=None, confidence=0.7, kind=DiagramKind.STATE)
-UNSURE = Routing(structural=0.93, new_requested=0.02, target=1, confidence=0.2, kind=DiagramKind.FLOW)
+UNSURE = Routing(structural=0.93, new_requested=0.02, target=None, confidence=0.6, kind=DiagramKind.FLOW)
+BACK_TO_FIRST = Routing(structural=0.93, new_requested=0.02, target=1, confidence=0.9, kind=DiagramKind.FLOW,
+                        returns=0.9)
 
 
 class FakeJudge:
@@ -357,7 +359,8 @@ def test_selection_survives_updates_for_elements_that_still_exist() -> None:
 
 
 def test_naming_another_diagram_switches_to_it_even_without_new_structure() -> None:
-    back_to_first = Routing(structural=0.05, new_requested=0.02, target=1, confidence=0.92, kind=DiagramKind.FLOW)
+    back_to_first = Routing(structural=0.05, new_requested=0.02, target=1, confidence=0.92, kind=DiagramKind.FLOW,
+                            returns=0.9)
     sketch, recorder = pipeline(FakeJudge(FIRST, NEW_REQUEST, back_to_first), FakeDrawer(FLOW))
     sketch.route(segment("First."))
     sketch.route(segment("New diagram please."))
@@ -368,15 +371,47 @@ def test_naming_another_diagram_switches_to_it_even_without_new_structure() -> N
     assert recorder.states[-1].updated is None
 
 
-def test_a_segment_for_another_diagram_switches_to_it_before_it_is_drawn() -> None:
-    sketch, recorder = pipeline(FakeJudge(FIRST, NEW_REQUEST, STRUCTURAL), FakeDrawer(FLOW))
+def test_returning_to_another_diagram_switches_to_it_before_it_is_drawn() -> None:
+    sketch, recorder = pipeline(FakeJudge(FIRST, NEW_REQUEST, BACK_TO_FIRST), FakeDrawer(FLOW))
     sketch.route(segment("First."))
     sketch.route(segment("New diagram please."))
 
-    sketch.route(segment("Between the gateway and orders there is a rate limiter."))
+    sketch.route(segment("Back in the first diagram, there is a rate limiter before orders."))
 
     assert recorder.states[-1].active == 1
     assert recorder.states[-1].updated is None
+
+
+def test_a_segment_on_the_subject_of_another_diagram_stays_on_the_current_one() -> None:
+    drawer = FakeDrawer(FLOW)
+    sketch, recorder = pipeline(FakeJudge(FIRST, NEW_REQUEST, STRUCTURAL), drawer)
+    sketch.route(segment("First."))
+    sketch.draw_next()
+    sketch.route(segment("New diagram please."))
+
+    sketch.route(segment("Between the gateway and orders there is a rate limiter."))
+    sketch.draw_next()
+
+    assert drawer.draw_calls[-1][0] == 2
+    assert recorder.states[-1].active == 2
+
+
+def test_a_chosen_tab_keeps_the_lines_after_a_new_diagram() -> None:
+    on_second = Routing(structural=0.93, new_requested=0.02, target=2, confidence=0.9, kind=DiagramKind.FLOW)
+    drawer = FakeDrawer(FLOW)
+    sketch, recorder = pipeline(FakeJudge(FIRST, NEW_REQUEST, on_second), drawer)
+    sketch.route(segment("First."))
+    sketch.draw_next()
+    sketch.route(segment("New diagram please."))
+    sketch.route(segment("A draft becomes paid."))
+    sketch.draw_next()
+
+    sketch.activate(1)
+    sketch.route(segment("And a paid draft is archived."))
+    sketch.draw_next()
+
+    assert drawer.draw_calls[-1][0] == 1
+    assert recorder.states[-1].active == 1
 
 
 def test_activating_a_tab_makes_it_the_current_diagram_for_routing() -> None:

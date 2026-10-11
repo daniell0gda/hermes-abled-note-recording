@@ -10,7 +10,11 @@ const WORDS: [&str; 18] = [
     "sends", "reads", "writes", "calls back", "approves", "rejects", "own db", "notifies", "retries", "assigns", "uploads",
     "token", "redirect with code", "payment fails 3 times", "ok", "has 1:N", "one-to-many", "",
 ];
-const KINDS: [&str; 9] = ["flow", "state", "tree", "sequence", "swimlane", "er", "nested", "layers", "dependency"];
+const KINDS: [&str; 26] = [
+    "flow", "state", "tree", "sequence", "swimlane", "er", "nested", "layers", "dependency", "timeline", "process", "loop", "pyramid",
+    "funnel", "venn", "fishbone", "kanban", "journey", "story-map", "uml-class", "deployment", "medallion", "org-chart", "db-schema",
+    "quadrant", "wardley",
+];
 
 struct Random(u64);
 
@@ -47,11 +51,11 @@ fn random_view(random: &mut Random, dense: bool) -> String {
         format!(r#"{{"id": "{id}", "label": "Group {id}", "members": [{}]}}"#, members.join(","))
     };
     let groups = match kind {
-        "swimlane" | "layers" => {
+        "swimlane" | "layers" | "process" | "kanban" | "story-map" | "quadrant" | "venn" => {
             let lanes = 2 + random.below(3);
             (0..lanes).map(|lane| group(format!("lane{lane}"), (0..count).filter(|node| node % lanes == lane).collect())).collect::<Vec<_>>()
         }
-        "nested" => {
+        "nested" | "deployment" => {
             let levels = 1 + random.below(3);
             (0..levels).map(|level| group(format!("ring{level}"), (1 + level * count / (levels + 1)..count).collect())).collect()
         }

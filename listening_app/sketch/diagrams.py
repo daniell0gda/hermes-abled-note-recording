@@ -19,6 +19,23 @@ class DiagramKind(StrEnum):
     NESTED = "nested"
     LAYERS = "layers"
     DEPENDENCY = "dependency"
+    TIMELINE = "timeline"
+    PROCESS = "process"
+    LOOP = "loop"
+    PYRAMID = "pyramid"
+    FUNNEL = "funnel"
+    VENN = "venn"
+    FISHBONE = "fishbone"
+    KANBAN = "kanban"
+    JOURNEY = "journey"
+    STORY_MAP = "story-map"
+    UML_CLASS = "uml-class"
+    DEPLOYMENT = "deployment"
+    MEDALLION = "medallion"
+    ORG_CHART = "org-chart"
+    DB_SCHEMA = "db-schema"
+    QUADRANT = "quadrant"
+    WARDLEY = "wardley"
 
 
 class Shape(StrEnum):

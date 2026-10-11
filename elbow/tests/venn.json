@@ -1,0 +1,23 @@
+{
+ "number": 1,
+ "title": "What makes a data scientist",
+ "kind": "venn",
+ "nodes": [
+  {"id": "science", "label": "Data science (the sweet spot)", "shape": "service", "focal": true},
+  {"id": "ml", "label": "Machine learning", "shape": "service", "focal": false},
+  {"id": "research", "label": "Traditional research", "shape": "service", "focal": false},
+  {"id": "danger", "label": "Danger zone (no rigour)", "shape": "service", "focal": false},
+  {"id": "tests", "label": "Hypothesis tests (A/B, t-test)", "shape": "service", "focal": false},
+  {"id": "etl", "label": "ETL scripts (Python, SQL)", "shape": "service", "focal": false},
+  {"id": "sizing", "label": "Market sizing", "shape": "service", "focal": false},
+  {"id": "decks", "label": "Slide decks", "shape": "service", "focal": false}
+ ],
+ "edges": [],
+ "groups": [
+  {"id": "stats", "label": "Statistics (math, inference)", "members": ["science", "ml", "research", "tests"]},
+  {"id": "code", "label": "Programming", "members": ["science", "ml", "danger", "etl"]},
+  {"id": "domain", "label": "Domain knowledge (the business)", "members": ["science", "research", "danger", "sizing"]}
+ ],
+ "selected": [],
+ "pointed": null
+}

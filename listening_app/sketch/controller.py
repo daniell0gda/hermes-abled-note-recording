@@ -13,6 +13,7 @@ from listening_app.devices import AudioSystem, com_initialized
 from listening_app.models import SegmentStatus, Source
 from listening_app.session import Notify, RecordingSession, new_session_id
 from listening_app.sketch.drawer import Drawer, SpokenLine, credentials_provider
+from listening_app.sketch.elbow import ElbowRenderer, program_path, system_theme
 from listening_app.sketch.export import DiagramFiles
 from listening_app.sketch.feed import SketchFeed, TranscriptionHandler, typed_lines
 from listening_app.sketch.jev_client import JevClient
@@ -61,6 +62,7 @@ class LiveSketch:
         self._files = DiagramFiles(self.folder)
         self._file_error_reported = False
         self._window = SketchWindow(self._window_event)
+        self._elbow = ElbowRenderer(program_path(), system_theme())
         self._feed = SketchFeed(self._heard, self._open_microphone)
         self._feed_lock = threading.Lock()
         self._stopped = False
@@ -132,6 +134,7 @@ class LiveSketch:
     # SketchListener
 
     def sketch_updated(self, state: SketchState) -> None:
+        state = self._elbow.drawn(state)
         self._window.show(state)
         if state.updated is not None:
             self._save(next(view for view in state.views if view["number"] == state.updated))

@@ -1,0 +1,27 @@
+{
+ "number": 1,
+ "title": "Platform team board",
+ "kind": "kanban",
+ "nodes": [
+  {"id": "ratelimit", "label": "API rate limiting (AVA-201 · priya)", "shape": "service", "focal": false},
+  {"id": "terraform", "label": "Terraform module cleanup (AVA-205 · leo)", "shape": "service", "focal": false},
+  {"id": "push", "label": "Move push notifications to the new provider (AVA-209 · maya)", "shape": "service", "focal": false},
+  {"id": "pg16", "label": "Postgres 16 upgrade (AVA-118 · sam)", "shape": "service", "focal": true},
+  {"id": "k8s", "label": "K8s node pool migration (AVA-142 · priya)", "shape": "service", "focal": false},
+  {"id": "tokens", "label": "Auth token rotation (AVA-150 · leo)", "shape": "service", "focal": false},
+  {"id": "dashboards", "label": "Observability dashboards (AVA-161 · dara)", "shape": "service", "focal": false},
+  {"id": "flags", "label": "Feature flag cleanup (AVA-176 · nadia)", "shape": "service", "focal": false},
+  {"id": "sso", "label": "Vendor SSO integration (AVA-183 · sam)", "shape": "external", "focal": false},
+  {"id": "retention", "label": "Log retention policy (AVA-090 · leo)", "shape": "service", "focal": false},
+  {"id": "cache", "label": "CI cache warmup (AVA-097 · maya)", "shape": "service", "focal": false}
+ ],
+ "edges": [],
+ "groups": [
+  {"id": "backlog", "label": "Backlog", "members": ["ratelimit", "terraform", "push"]},
+  {"id": "doing", "label": "In progress (3)", "members": ["pg16", "k8s", "tokens", "dashboards"]},
+  {"id": "review", "label": "Review (3)", "members": ["flags", "sso"]},
+  {"id": "done", "label": "Done", "members": ["retention", "cache"]}
+ ],
+ "selected": [],
+ "pointed": null
+}

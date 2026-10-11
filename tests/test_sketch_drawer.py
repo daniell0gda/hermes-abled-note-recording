@@ -141,6 +141,7 @@ def test_routed_prompt_lists_every_diagram_and_asks_for_a_destination_line() -> 
 @pytest.mark.parametrize(("answer", "expected"), [
     ("diagram 2\ndraft \"Draft\"", RoutedDrawing(Destination.existing(2), 'draft "Draft"')),
     ("diagram new sequence\nclient -> server", RoutedDrawing(Destination.new(DiagramKind.SEQUENCE), "client -> server")),
+    ("diagram new story-map\nfind \"Find\"", RoutedDrawing(Destination.new(DiagramKind.STORY_MAP), 'find "Find"')),
     ("```\ndiagram 1\n" + CURRENT + "\n```", RoutedDrawing(Destination.existing(1), CURRENT + "\n```")),
     ("none", RoutedDrawing(None, "")),
 ])
@@ -304,3 +305,15 @@ def test_parse_revision_reads_optional_kind_line() -> None:
 def test_parse_revision_reads_a_bare_type_line_as_the_kind() -> None:
     body = 'title "Issue flow"\nuser "User"'
     assert parse_revision("flow\n" + body) == Revision(body, DiagramKind.FLOW)
+
+
+@pytest.mark.parametrize("kind", list(DiagramKind))
+def test_every_kind_has_a_drawing_hint_and_a_line_in_the_type_menu(kind: DiagramKind) -> None:
+    assert drawer_module.KIND_HINTS[kind]
+    assert f"\n- {kind.value}: " in drawer_module.KIND_CHOICE_RULES
+
+
+@pytest.mark.parametrize("kind", list(DiagramKind))
+def test_every_kind_can_be_chosen_in_a_kind_line(kind: DiagramKind) -> None:
+    body = 'title "Any"\na "A"'
+    assert parse_revision(f"kind {kind.value}\n" + body) == Revision(body, kind)

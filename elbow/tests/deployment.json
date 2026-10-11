@@ -1,0 +1,28 @@
+{
+ "number": 1,
+ "title": "Checkout service in production",
+ "kind": "deployment",
+ "nodes": [
+  {"id": "cdn", "label": "Cloudflare (CDN, edge-cache v1.2)", "shape": "external", "focal": false},
+  {"id": "ingress", "label": "ingress (POD, nginx-ingress v1.11)", "shape": "service", "focal": false},
+  {"id": "app", "label": "app (POD, checkout-api v2.4.1, sidecar-otel v0.9, x3)", "shape": "service", "focal": false},
+  {"id": "worker", "label": "worker (POD, checkout-worker v2.4.1, x2)", "shape": "service", "focal": false},
+  {"id": "primary", "label": "rds-primary (MANAGED, postgres 16.2)", "shape": "database", "focal": true},
+  {"id": "standby", "label": "rds-standby (postgres 16.2)", "shape": "database", "focal": false}
+ ],
+ "edges": [
+  {"id": "cdn->ingress", "source": "cdn", "target": "ingress", "label": "HTTPS:443", "style": "sync", "focal": false},
+  {"id": "ingress->app", "source": "ingress", "target": "app", "label": "HTTP:8080", "style": "sync", "focal": false},
+  {"id": "app->worker", "source": "app", "target": "worker", "label": "AMQP:5672", "style": "async", "focal": false},
+  {"id": "app->primary", "source": "app", "target": "primary", "label": "TLS:5432", "style": "sync", "focal": false},
+  {"id": "worker->primary", "source": "worker", "target": "primary", "label": "TLS:5432", "style": "sync", "focal": false},
+  {"id": "primary->standby", "source": "primary", "target": "standby", "label": "WAL stream", "style": "async", "focal": false}
+ ],
+ "groups": [
+  {"id": "edge", "label": "edge", "members": ["cdn"]},
+  {"id": "prod", "label": "prod / eu-west-1", "members": ["ingress", "app", "worker", "primary", "standby"]},
+  {"id": "data", "label": "data", "members": ["primary", "standby"]}
+ ],
+ "selected": [],
+ "pointed": null
+}

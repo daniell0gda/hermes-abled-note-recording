@@ -38,7 +38,15 @@ A Rust library and CLI that draws a live-sketch diagram (the `Diagram.view()` JS
     swimlane and layer band is an `sk-group` with the group's id, drawn before edges and nodes (inner rings over
     outer ones). `boxes()` marks them `section`, and the pointer only picks a section when no node or edge is
     within its radius.
-  - `check` — the six connector rules as violations, plus crossings, bends, area and ambiguous labels.
+  - `figure` — primitives for the kinds that are not boxes and elbows: rects, circles, polygons, lines and text in
+    theme tones, selectable `Section`s and own legend keys. A node with `figures` is drawn as them (the first is
+    its `sk-shape`); an edge can be `Bend::Free` (straight, any angle) or `Bend::Arc`, with UML end markers.
+  - `kinds/` — one module per kind of the diagram-design catalogue that has its own grammar. Figurative kinds
+    build their own scene (timeline, loop, pyramid/funnel, venn, fishbone, kanban, journey, story-map, quadrant,
+    wardley); the others run the layered layout with their own node sizes and post-process it (process,
+    uml-class, deployment, medallion, org-chart, db-schema).
+  - `check` — the six connector rules as violations, plus crossings, bends, area and ambiguous labels. Free and
+    arc edges are exempt: they are the documented data lines (fishbone bones, Wardley links, loop rings).
   - `variants` — renders a parameter grid, scores each result and picks the best.
 - `.claude/skills/sketch-eval/scripts/render_rust.py` draws a line-format file with the CLI (optional Jev-like
   `--styles`) and screenshots it like `render_structure.py`.
@@ -52,7 +60,9 @@ A Rust library and CLI that draws a live-sketch diagram (the `Diagram.view()` JS
 | 3. More kinds: tree, state, sequence, swimlane | Done. All six reference talks: 0 violations |
 | 4. Variant search | Done. `--best` / `--variants` |
 | 4b. The other kinds: er, nested, layers, dependency | Done. One fixture each in `elbow/tests/`: 0 violations |
-| 5. PyO3 binding, use in the app, Jev choosing `params` | Not started |
+| 4c. The rest of the diagram-design catalogue that fits the view (17 kinds) | Done. One fixture each: 0 violations |
+| 5a. Use in the app through the CLI | Done. `sketch/elbow.py` draws every view with `elbow.exe --best` (cached, theme from Windows); the window and the saved HTML show that SVG, `sketch.js` only when elbow is missing or fails. `build.ps1` builds and bundles it |
+| 5b. PyO3 binding, Jev choosing `params` | Not started |
 
 What the new kinds draw (after the diagram-design type references):
 
@@ -64,14 +74,36 @@ What the new kinds draw (after the diagram-design type references):
 - **dependency** — ranked top to bottom, an `N IN` fan-in badge on every node, leaves in the store look, the cycle
   routed outside the stack; it is the only accent (focal flags on other edges are ignored).
 
+The diagram-design kinds added in 4c, and how a view maps onto them (the drawer's `KIND_HINTS` tell the model the
+same label conventions):
+
+| Kind | Nodes | Edges | Groups | Accent |
+|---|---|---|---|---|
+| timeline | events in order, `Name (date)`; spaced by date when every date has a year | not drawn | periods (brackets) | focal = milestone |
+| process | steps with the lane's role badge, step numbers per rank | handoffs | lanes | focal step and its handoffs |
+| loop | stations clockwise; first database/cache/queue = hub | ring arcs, dashed spokes to the hub | — | focal station |
+| pyramid / funnel | layers, top first | not drawn | — | focal layer |
+| venn | items in the region of the sets that list them | not drawn | sets (2–3 circles) | focal item |
+| fishbone | effect (sink), categories, sub-causes | cause → effect, as bones and ticks | — | focal category = root cause |
+| kanban | cards `Title (ticket · owner)` | not drawn | columns, `Name (WIP limit)` | focal = blocked card, over-limit chip |
+| journey | stages `Stage (feeling, touchpoint)`; `note` nodes = pain markers | curve segments | — | trough (derived) |
+| story-map | activities and steps (no group), stories | not drawn (assign columns) | release slices | focal = risky story, release cut |
+| uml-class | classes `Name (+ attr: T, + op(): R)` | relationship from the label's first words | zones | focal class and its inbound realizations |
+| deployment | hosts `Name (POD, image v1, x3)` | network paths; cross-zone blue | zones (dashed) | focal |
+| medallion | tiers `Tier (bucket; tool; format; writer)` | promotions as arcs over the cards | — | focal tier and the promotion into it |
+| org-chart | `Name (invoke, scope)` | owner → report, bus connectors | zones | focal = front door |
+| db-schema | tables `schema.table (col type PK, …)` | FKs from row to row | schemas | first `ON DELETE CASCADE` (derived) |
+| quadrant | items as dots | not drawn | quadrants in reading order; axis words from `A vs B` title | focal item |
+| wardley | components `Name (stage)` | depends-on links, straight | — | focal = evolving, with arrow |
+
 Measured on this machine:
 
 - One render: 0.05–2.8 ms. CLI with process start and `--best` (24 variants): 15–55 ms per diagram.
-- Random diagrams within the diagram-design budget (`cargo run --release --example stress 900 --best`):
-  34 of 900 still break a rule (flow 6/102, state 6/103, tree 1/87, swimlane 2/102, sequence 0/108, er 2/106,
-  nested 4/97, layers 13/92, dependency 0/103). Most of these are a label that has no free spot in a crowded
-  channel. Random layers are hardest: the generator spreads nodes over layers at random, which gives many long
-  and upward edges.
+- Random diagrams within the diagram-design budget (`cargo run --release --example stress 1500 --best`, all 26
+  kinds): 42 of 1500 still break a rule. Twelve kinds have none (sequence, nested, fishbone, funnel, journey,
+  kanban, pyramid, quadrant, story-map, timeline, venn, wardley); the most are db-schema 8/39 and layers 8/48.
+  Most are a label that has no free spot in a crowded channel. Random db-schema tables have one column, so all
+  foreign keys meet on one row; random layers spread nodes over layers at random, with long upward edges.
 
 ## Usage
 
@@ -88,10 +120,15 @@ On this machine `cargo` needs the VS 2022 Build Tools environment (`vcvars64.bat
 
 ## Next
 
-- Use the renderer in the app: a PyO3 module or the CLI from `export.py`, replacing `sketch.js` + dagre.
+- A PyO3 module instead of one `elbow.exe` process per changed view, if process start ever matters.
 - Let Jev choose among `--variants` (or set `params` directly) instead of the fixed score.
 - Let `show-me` write a view JSON and call the CLI instead of hand-writing SVG.
 - Remaining layout gaps: crowded label channels in swimlanes and layers, group zones that overlap other nodes are
   skipped, sequence fragments (`alt`, `loop`) and activation bars are not drawn, groups in a nested view that
   overlap without one holding the other get only the nodes they hold alone.
 - The drawer's ER hint does not ask for field lists in brackets yet, so live ER entities show only their names.
+
+- Known limits of the new kinds: a connector can run on a nested/deployment zone border in a top-down layout
+  (deployment stays left to right for this reason), crowded Wardley maps mask labels that long links cross, more
+  than two foreign keys on one db-schema row break the attach-point gap, kinds do not enforce the diagram-design
+  budgets (they grow instead), and the stress generator does not make kind-shaped random views.

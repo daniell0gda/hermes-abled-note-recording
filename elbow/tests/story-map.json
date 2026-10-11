@@ -1,0 +1,50 @@
+{
+ "number": 1,
+ "title": "Expense reporting, first release",
+ "kind": "story-map",
+ "nodes": [
+  {"id": "capture", "label": "Capture a receipt", "shape": "service", "focal": false},
+  {"id": "submit", "label": "Submit a report", "shape": "service", "focal": false},
+  {"id": "approve", "label": "Approve it", "shape": "service", "focal": false},
+  {"id": "reimburse", "label": "Get reimbursed", "shape": "service", "focal": false},
+  {"id": "snap", "label": "Snap a photo", "shape": "service", "focal": false},
+  {"id": "forward", "label": "Forward an email", "shape": "service", "focal": false},
+  {"id": "group", "label": "Group expenses", "shape": "service", "focal": false},
+  {"id": "review", "label": "Review the claims", "shape": "service", "focal": false},
+  {"id": "track", "label": "Track the payout", "shape": "service", "focal": false},
+  {"id": "upload", "label": "Photo upload (EXP-101 · 3pt)", "shape": "service", "focal": false},
+  {"id": "onepage", "label": "One-page report (EXP-102 · 5pt)", "shape": "service", "focal": false},
+  {"id": "decide", "label": "Approve or reject (EXP-103 · 2pt)", "shape": "service", "focal": false},
+  {"id": "transfer", "label": "Bank transfer (EXP-104 · 3pt)", "shape": "service", "focal": false},
+  {"id": "ocr", "label": "Receipt OCR (EXP-110 · 8pt)", "shape": "service", "focal": true},
+  {"id": "inbox", "label": "Email forwarding (EXP-111 · 3pt)", "shape": "service", "focal": false},
+  {"id": "delegate", "label": "Delegate approval (EXP-112 · 3pt)", "shape": "service", "focal": false},
+  {"id": "mileage", "label": "Mileage tracker (EXP-120 · 5pt)", "shape": "service", "focal": false},
+  {"id": "policy", "label": "Policy warnings (EXP-121 · 5pt)", "shape": "service", "focal": false},
+  {"id": "status", "label": "Payout status push (EXP-122 · 2pt)", "shape": "service", "focal": false}
+ ],
+ "edges": [
+  {"id": "capture->snap", "source": "capture", "target": "snap", "label": "", "style": "sync", "focal": false},
+  {"id": "capture->forward", "source": "capture", "target": "forward", "label": "", "style": "sync", "focal": false},
+  {"id": "submit->group", "source": "submit", "target": "group", "label": "", "style": "sync", "focal": false},
+  {"id": "approve->review", "source": "approve", "target": "review", "label": "", "style": "sync", "focal": false},
+  {"id": "reimburse->track", "source": "reimburse", "target": "track", "label": "", "style": "sync", "focal": false},
+  {"id": "snap->upload", "source": "snap", "target": "upload", "label": "", "style": "sync", "focal": false},
+  {"id": "group->onepage", "source": "group", "target": "onepage", "label": "", "style": "sync", "focal": false},
+  {"id": "review->decide", "source": "review", "target": "decide", "label": "", "style": "sync", "focal": false},
+  {"id": "track->transfer", "source": "track", "target": "transfer", "label": "", "style": "sync", "focal": false},
+  {"id": "snap->ocr", "source": "snap", "target": "ocr", "label": "", "style": "sync", "focal": false},
+  {"id": "forward->inbox", "source": "forward", "target": "inbox", "label": "", "style": "sync", "focal": false},
+  {"id": "approve->delegate", "source": "approve", "target": "delegate", "label": "", "style": "sync", "focal": false},
+  {"id": "capture->mileage", "source": "capture", "target": "mileage", "label": "", "style": "sync", "focal": false},
+  {"id": "submit->policy", "source": "submit", "target": "policy", "label": "", "style": "sync", "focal": false},
+  {"id": "track->status", "source": "track", "target": "status", "label": "", "style": "sync", "focal": false}
+ ],
+ "groups": [
+  {"id": "mvp", "label": "MVP", "members": ["upload", "onepage", "decide", "transfer"]},
+  {"id": "r2", "label": "Release 2", "members": ["ocr", "inbox", "delegate"]},
+  {"id": "later", "label": "Later", "members": ["mileage", "policy", "status"]}
+ ],
+ "selected": [],
+ "pointed": null
+}

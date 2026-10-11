@@ -57,7 +57,7 @@ pub fn build(view: &View) -> Scene {
         .map(|(node, (id, content))| {
             let centre = centres[column[node]];
             let rect = Rect::new(centre - content.width / 2.0, MARGIN, content.width, height);
-            SceneNode { id, rect, content }
+            SceneNode::new(id, rect, content)
         })
         .collect();
     let right = x.max(edges.iter().filter_map(|edge| edge.label.as_ref()).map(|label| label.rect.right()).fold(0.0, f64::max));
@@ -118,15 +118,6 @@ fn draw_message(message: &EdgeInput, y: f64, centres: &[f64], column: &[usize]) 
         let mask = Rect::new(gap_mid - width / 2.0, y - LABEL_GAP - MASK_HEIGHT, width, MASK_HEIGHT);
         (vec![Point::new(from, y), Point::new(to, y)], mask)
     };
-    SceneEdge {
-        id: message.id.clone(),
-        source: message.source,
-        target: message.target,
-        points,
-        style: message.style,
-        focal: message.focal,
-        cycle: false,
-        label: (!message.text.is_empty()).then(|| LabelBox { rect: label, text: message.text.clone() }),
-        marks: Vec::new(),
-    }
+    let label = (!message.text.is_empty()).then(|| LabelBox { rect: label, text: message.text.clone() });
+    SceneEdge { label, ..SceneEdge::new(message, points) }
 }

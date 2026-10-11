@@ -36,6 +36,54 @@ KIND_HINTS = {
                         "as a group.",
     DiagramKind.LAYERS: "Groups are the stacked layers, from top to bottom; every node sits in exactly one layer.",
     DiagramKind.DEPENDENCY: "Unordered dependencies or ownership between components; edges mean depends-on, not sequence.",
+    DiagramKind.TIMELINE: 'Nodes are the events in the order they happened, each labelled "Name (date)", e.g. "Beta launch '
+                          '(2024 Q3)". No edges. A group marks a period or phase and lists its events.',
+    DiagramKind.PROCESS: "Write one `group` line per lane (a role, team or division) listing its steps; every node sits in "
+                         'exactly one lane. Nodes are the steps, "Title (detail)"; edges are the handoffs in order, '
+                         "labelled with the data or document passed on.",
+    DiagramKind.LOOP: "Nodes are the stations of the cycle in clockwise order: each edge goes to the next station and "
+                      "the last one back to the first. A shared store or record the loop writes back to is one extra "
+                      "node, with an edge from each station that writes to it, labelled with what is written.",
+    DiagramKind.PYRAMID: "Nodes are the levels, listed from the narrow top (the rarest or most valuable) down to the broad "
+                         'base, each labelled "Name (short detail)". No edges, no groups.',
+    DiagramKind.FUNNEL: "Nodes are the stages, listed from the wide top (everyone) down to the narrow end, each labelled "
+                        '"Name (count or detail)". No edges, no groups.',
+    DiagramKind.VENN: "Write one `group` line per set (two or three sets). Nodes are the items: list an item in every set "
+                      "it belongs to, so an item in two groups sits in their overlap. No edges.",
+    DiagramKind.FISHBONE: "One node is the observed problem (the effect). Each cause category is a node with an edge to "
+                          "the effect; each concrete cause is a node with an edge to its category.",
+    DiagramKind.KANBAN: "Write one `group` line per column, left to right (e.g. Backlog, In progress, Done), with the WIP "
+                        'limit in brackets when said, e.g. "In progress (3)". Nodes are the cards, '
+                        '"Title (ticket · owner)", each in exactly one column. No edges.',
+    DiagramKind.JOURNEY: "Nodes are the stages of one person's experience, in order, labelled "
+                         '"Stage (feeling, touchpoint)", e.g. "Hit the limit (frustrated, app)"; an edge goes from each '
+                         "stage to the next. A pain point the speaker names is a node with an edge to its stage.",
+    DiagramKind.STORY_MAP: "Activities are nodes in no group, in the order the user does them; a user step is a node in "
+                           "no group with an edge from its activity. Write one `group` line per release slice, first to "
+                           "last (e.g. MVP, Release 2, Later), listing its stories; every story has an edge from its "
+                           'activity or step. Story label "Title (ticket · estimate)".',
+    DiagramKind.UML_CLASS: 'Nodes are classes, "Name (+ attribute: Type, + operation(arg): Return)", with "interface" or '
+                           '"abstract" before the name when said. An edge label starts with the relationship: extends, '
+                           "implements, owns (the source owns the target), has, uses, or else an association with its "
+                           'multiplicity, e.g. "places 1:N".',
+    DiagramKind.DEPLOYMENT: "Groups are environments or network zones (e.g. prod, edge, data) listing the hosts in them. "
+                            'Nodes are hosts, pods, VMs or managed services, "Name (POD, artifact version, x3)" with '
+                            'the replica count as x3. Edges are network paths labelled with protocol and port, e.g. '
+                            '"HTTPS:443".',
+    DiagramKind.MEDALLION: 'Nodes are the data tiers from raw to curated, "Tier (bucket; tool; format; writer)". An edge '
+                           'goes from each tier to the next, labelled with what the promotion does, e.g. "PII REMOVE". '
+                           "A source system that feeds the first tier is a node with an edge to it.",
+    DiagramKind.ORG_CHART: 'Nodes are people, teams, roles or agents, "Name (how to reach them, scope)", e.g. '
+                           '"Billing pod (#billing, refunds · invoices)". Every edge goes from the owner or lead to who '
+                           "reports to them, from one front door at the top.",
+    DiagramKind.DB_SCHEMA: 'Nodes are tables, "schema.table (column type PK, column type FK, ...)" with the SQL types '
+                           "said. Each edge is a foreign key from the child table to the parent table, labelled "
+                           '"fk_column ON DELETE action".',
+    DiagramKind.QUADRANT: 'Title the diagram "<vertical axis> vs <horizontal axis>", e.g. "Value vs effort". Write one '
+                          "`group` line per quadrant in reading order (top-left, top-right, bottom-left, bottom-right) "
+                          "listing its items. Nodes are the items. No edges.",
+    DiagramKind.WARDLEY: 'Nodes are the components of the value chain, "Name (genesis|custom|product|commodity)". An edge '
+                         "goes from a component to the one it depends on; the user's need is at the top.",
 }
 LANGUAGE_RULES = {
     Language.AUTO: "Write labels in the language the speaker uses.",
@@ -130,6 +178,23 @@ KIND_CHOICE_RULES = (
     "- nested: scope / containment (groups hold members), prefer top-to-bottom\n"
     "- layers: stacked concerns top-to-bottom\n"
     "- dependency: unordered depends-on links\n"
+    "- timeline: dated events and milestones\n"
+    "- process: steps by roles with the data passed at each handoff\n"
+    "- loop: a cycle or flywheel that comes back to its start\n"
+    "- pyramid: ranked levels, narrow top\n"
+    "- funnel: stages that narrow down, conversion\n"
+    "- venn: overlapping sets or concepts\n"
+    "- fishbone: the causes of one problem\n"
+    "- kanban: work items in status columns\n"
+    "- journey: one person's stages and feelings\n"
+    "- story-map: user activities and stories cut into releases\n"
+    "- uml-class: classes with attributes, operations and inheritance\n"
+    "- deployment: what runs where, in which environment\n"
+    "- medallion: data tiers from raw to curated\n"
+    "- org-chart: who owns what among people and teams\n"
+    "- db-schema: tables, typed columns and foreign keys\n"
+    "- quadrant: items in a 2×2 of two criteria\n"
+    "- wardley: a value chain by evolution stage\n"
     "If the current type is already right, omit the kind line and keep it."
 )
 
@@ -227,7 +292,8 @@ class Drawer:
             "You keep live diagrams in sync with what a speaker explains out loud. "
             "Decide which diagram the new lines belong to, then update that diagram.",
             "The first line of your answer is exactly one of:",
-            "diagram <number>      the new lines continue or return to that diagram",
+            "diagram <number>      the current diagram, or another one only when the speaker explicitly "
+            "names it or goes back to it",
             "diagram new <type>    the new lines themselves start a subject no existing diagram covers; "
             "<type> is one of " + ", ".join(kind.value for kind in DiagramKind),
             f"{_NO_STRUCTURE}                  the new lines add no structure (small talk, filler, questions)",

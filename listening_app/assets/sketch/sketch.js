@@ -21,8 +21,11 @@
   const MAX_SCALE = 1.6;
   const EYEBROWS = { database: "DATABASE", queue: "QUEUE", cache: "CACHE", external: "EXTERNAL", client: "CLIENT", actor: "ACTOR" };
   const BASE_HEIGHT = { database: 56, decision: 56, actor: 48 };
-  const RANK_DIRECTION = { tree: "TB", nested: "TB", layers: "TB", swimlane: "TB", state: "TB" };
-  const LANE_KINDS = new Set(["swimlane", "layers"]);
+  const RANK_DIRECTION = {
+    tree: "TB", nested: "TB", layers: "TB", swimlane: "TB", state: "TB", process: "TB", "org-chart": "TB",
+    "uml-class": "TB", wardley: "TB",
+  };
+  const LANE_KINDS = new Set(["swimlane", "layers", "process"]);
   const LANE_PAD = 20;
   const COLUMN_GAP = 64;
   const STACK_GAP = 16;
@@ -435,12 +438,29 @@
     else if (diagram.kind === "sequence") size = renderSequence(svg, diagram);
     else if (LANE_KINDS.has(diagram.kind) && diagram.groups.length) size = renderLanes(svg, diagram);
     else size = renderGraph(svg, diagram);
+    fit(svg, size);
+    mark(svg, diagram.selected || [], diagram.pointed || null);
+    return performance.now() - started;
+  }
+
+  function fit(svg, size) {
     svg.setAttribute("viewBox", `0 0 ${Math.ceil(size.width)} ${Math.ceil(size.height)}`);
     svg.setAttribute("preserveAspectRatio", "xMidYMin meet");
     svg.style.maxWidth = `${Math.ceil(size.width * MAX_SCALE)}px`;
     svg.style.maxHeight = `${Math.ceil(size.height * MAX_SCALE)}px`;
-    mark(svg, diagram.selected || [], diagram.pointed || null);
-    return performance.now() - started;
+  }
+
+  /**
+   * Shows a diagram that elbow already drew (`markup`, a standalone <svg>) in `svg`, replacing its content and
+   * sized like `render` sizes its own drawings. Elbow's groups carry the same data-id and classes, so `mark` and
+   * `boxes` work on them unchanged.
+   */
+  function show(svg, markup, selected, pointed) {
+    const drawn = new DOMParser().parseFromString(markup, "image/svg+xml").documentElement;
+    svg.replaceChildren(...[...drawn.childNodes].map((node) => document.importNode(node, true)));
+    const [, , width, height] = drawn.getAttribute("viewBox").split(/\s+/).map(Number);
+    fit(svg, { width, height });
+    mark(svg, selected, pointed);
   }
 
   /** Shows the selection (solid outline) and the pointed-at element (light highlight) without a re-layout. */
@@ -464,5 +484,5 @@
     return result;
   }
 
-  global.SketchRenderer = { render, mark, boxes };
+  global.SketchRenderer = { render, show, mark, boxes };
 })(window);

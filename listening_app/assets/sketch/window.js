@@ -55,7 +55,12 @@
     eyebrow.textContent = view.number ? `Diagram ${view.number} · ${view.kind}` : "Live sketch";
     title.textContent = view.title || (view.number ? "New diagram" : "Listening…");
     copyPath.disabled = !view.number;
-    SketchRenderer.render(svg, Object.assign({}, view, { selected: [...selection], pointed }));
+    if (view.svg) {
+      document.documentElement.dataset.theme = view.theme;
+      SketchRenderer.show(svg, view.svg, [...selection], pointed);
+    } else {
+      SketchRenderer.render(svg, Object.assign({}, view, { selected: [...selection], pointed }));
+    }
     sendBoxes();
   }
 

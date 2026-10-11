@@ -4,7 +4,9 @@ use std::collections::HashMap;
 
 use crate::cardinality::{self, Ends};
 use crate::cycle::{self, Cycle};
+use crate::figure::{Figure, LegendKey, Marker, Paint, Section};
 use crate::geom::{segments, snap_up, Point, Rect, Segment};
+use crate::kinds;
 use crate::label::{place, LabelRequest, LABEL_SIZE, LABEL_TRACKING, MASK_HEIGHT, MASK_PADDING};
 use crate::layout::{back_edges, layer, Bands, NodeBox, Pin};
 use crate::node::{content, Links, NodeContent};
@@ -30,15 +32,35 @@ const LANE_ROOM: f64 = 24.0;
 const ER_CHANNEL: f64 = 96.0;
 const CYCLE_LABEL: &str = "CYCLE";
 
+/// A placed node. Without `figures` it is drawn as the editorial box around `content`; with them it is
+/// drawn as those figures, the first being the shape the selection looks change.
 pub struct SceneNode {
     pub id: String,
     pub rect: Rect,
     pub content: NodeContent,
+    pub figures: Vec<Figure>,
+}
+
+impl SceneNode {
+    pub fn new(id: String, rect: Rect, content: NodeContent) -> SceneNode {
+        SceneNode { id, rect, content, figures: Vec::new() }
+    }
 }
 
 pub struct LabelBox {
     pub rect: Rect,
     pub text: String,
+}
+
+/// How an edge's points are joined: orthogonal runs with rounded elbows (checked against the connector
+/// rules), straight runs in any direction, or one circular arc from the first point to the last. Free and
+/// arc edges are the data lines some kinds are exempt for (fishbone bones, Wardley links, loop rings).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum Bend {
+    #[default]
+    Elbow,
+    Free,
+    Arc { radius: f64, clockwise: bool },
 }
 
 pub struct SceneEdge {
@@ -51,9 +73,35 @@ pub struct SceneEdge {
     pub cycle: bool,
     pub label: Option<LabelBox>,
     pub marks: Vec<LabelBox>,
+    pub bend: Bend,
+    pub markers: Option<(Marker, Marker)>,
+    pub paint: Option<Paint>,
 }
 
 impl SceneEdge {
+    /// An edge for `input` along `points`, with the default look of its style.
+    pub fn new(input: &EdgeInput, points: Vec<Point>) -> SceneEdge {
+        SceneEdge {
+            id: input.id.clone(),
+            source: input.source,
+            target: input.target,
+            points,
+            style: input.style,
+            focal: input.focal,
+            cycle: false,
+            label: None,
+            marks: Vec::new(),
+            bend: Bend::Elbow,
+            markers: None,
+            paint: None,
+        }
+    }
+
+    /// True when the edge follows the orthogonal connector rules.
+    pub fn is_elbow(&self) -> bool {
+        self.bend == Bend::Elbow
+    }
+
     /// The edge's label and its cardinality marks.
     pub fn texts(&self) -> impl Iterator<Item = &LabelBox> {
         self.label.iter().chain(&self.marks)
@@ -85,6 +133,10 @@ pub struct Scene {
     pub lifelines: Vec<Segment>,
     pub lanes: Vec<Lane>,
     pub lane_gutter: f64,
+    pub sections: Vec<Section>,
+    pub decor: Vec<Figure>,
+    pub overlay: Vec<Figure>,
+    pub legend: Option<Vec<LegendKey>>,
     pub width: f64,
     pub height: f64,
 }
@@ -101,12 +153,16 @@ impl Scene {
             lifelines: Vec::new(),
             lanes: Vec::new(),
             lane_gutter: 0.0,
+            sections: Vec::new(),
+            decor: Vec::new(),
+            overlay: Vec::new(),
+            legend: None,
             width: 0.0,
             height: 0.0,
         }
     }
 
-    /// Every box drawn: nodes, zones, rings, labels and marks.
+    /// Every box drawn: nodes, zones, rings, labels, marks and the bounds of every figure.
     pub fn boxes(&self) -> impl Iterator<Item = Rect> + '_ {
         self.nodes
             .iter()
@@ -114,6 +170,25 @@ impl Scene {
             .chain(self.zones.iter().map(|zone| zone.rect))
             .chain(self.rings.iter().flat_map(|ring| [ring.rect, ring.label_rect]))
             .chain(self.edges.iter().flat_map(SceneEdge::texts).map(|text| text.rect))
+            .chain(self.figures().map(Figure::bounds))
+    }
+
+    fn figures(&self) -> impl Iterator<Item = &Figure> + '_ {
+        self.nodes
+            .iter()
+            .flat_map(|node| &node.figures)
+            .chain(self.sections.iter().flat_map(|section| &section.figures))
+            .chain(&self.decor)
+            .chain(&self.overlay)
+    }
+
+    fn figures_mut(&mut self) -> impl Iterator<Item = &mut Figure> + '_ {
+        self.nodes
+            .iter_mut()
+            .flat_map(|node| &mut node.figures)
+            .chain(self.sections.iter_mut().flat_map(|section| &mut section.figures))
+            .chain(&mut self.decor)
+            .chain(&mut self.overlay)
     }
 
     fn points(&self) -> impl Iterator<Item = Point> + '_ {
@@ -137,6 +212,22 @@ pub struct EdgeInput {
 pub fn build(view: &View, params: &Params) -> Scene {
     match view.kind {
         Kind::Sequence => sequence::build(view),
+        Kind::Timeline => kinds::timeline::build(view, params),
+        Kind::Loop => kinds::cycle_loop::build(view, params),
+        Kind::Pyramid | Kind::Funnel => kinds::pyramid::build(view, params),
+        Kind::Venn => kinds::venn::build(view, params),
+        Kind::Fishbone => kinds::fishbone::build(view, params),
+        Kind::Kanban => kinds::kanban::build(view, params),
+        Kind::Journey => kinds::journey::build(view, params),
+        Kind::StoryMap => kinds::story_map::build(view, params),
+        Kind::Quadrant => kinds::quadrant::build(view, params),
+        Kind::Wardley => kinds::wardley::build(view, params),
+        Kind::Process => kinds::process::build(view, params),
+        Kind::UmlClass => kinds::uml_class::build(view, params),
+        Kind::Deployment => kinds::deployment::build(view, params),
+        Kind::Medallion => kinds::medallion::build(view, params),
+        Kind::OrgChart => kinds::org_chart::build(view, params),
+        Kind::DbSchema => kinds::db_schema::build(view, params),
         _ => layered(view, params),
     }
     .fitted_to_canvas()
@@ -157,6 +248,7 @@ impl Scene {
         let shift = |rect: &mut Rect| *rect = Rect::new(rect.x + dx, rect.y + dy, rect.w, rect.h);
         let shift_point = |point: &mut Point| *point = Point::new(point.x + dx, point.y + dy);
         self.nodes.iter_mut().for_each(|node| shift(&mut node.rect));
+        self.figures_mut().for_each(|figure| figure.shift(dx, dy));
         self.zones.iter_mut().for_each(|zone| shift(&mut zone.rect));
         for ring in &mut self.rings {
             shift(&mut ring.rect);
@@ -180,7 +272,8 @@ impl Scene {
         self
     }
 
-    fn measured(mut self) -> Scene {
+    /// Sets the canvas size to everything drawn plus the margin.
+    pub fn measured(mut self) -> Scene {
         let (right, bottom) = self.points().fold((0.0, 0.0), |(x, y): (f64, f64), point| (x.max(point.x), y.max(point.y)));
         self.width = right + MARGIN;
         self.height = bottom + MARGIN;
@@ -200,8 +293,8 @@ enum Banding {
 impl Banding {
     fn for_view(view: &View, ids: &[String]) -> Banding {
         let planned = match view.kind {
-            Kind::Swimlane => lane_plan(view, ids).map(Banding::Lanes),
-            Kind::Nested => rings::plan(view, ids).map(Banding::Rings),
+            Kind::Swimlane | Kind::Process => lane_plan(view, ids).map(Banding::Lanes),
+            Kind::Nested | Kind::Deployment => rings::plan(view, ids).map(Banding::Rings),
             Kind::Layers => tiers::plan(view, ids).map(Banding::Tiers),
             _ => None,
         };
@@ -286,8 +379,16 @@ struct Routes {
     preferred: Vec<Option<Segment>>,
 }
 
-fn layered(view: &View, params: &Params) -> Scene {
-    let (ids, contents) = unique_nodes(view);
+/// The layered layout with the node contents of `view`'s kind.
+pub fn layered(view: &View, params: &Params) -> Scene {
+    let (_, contents) = unique_nodes(view);
+    layered_with(view, params, contents)
+}
+
+/// The layered layout with node contents a kind sized itself, one per id of `unique_nodes(view)`, in
+/// that order.
+pub fn layered_with(view: &View, params: &Params, contents: Vec<NodeContent>) -> Scene {
+    let (ids, _) = unique_nodes(view);
     let edges = known_edges(view, &ids);
     let banding = Banding::for_view(view, &ids);
     let direction = banding.direction(params, view.kind);
@@ -322,7 +423,7 @@ fn layered(view: &View, params: &Params) -> Scene {
         .into_iter()
         .zip(contents)
         .zip(&routes.rects)
-        .map(|((id, content), &rect)| SceneNode { id, rect, content })
+        .map(|((id, content), &rect)| SceneNode::new(id, rect, content))
         .collect();
     let mut scene = Scene { nodes, edges: scene_edges, lane_gutter: left - LANE_RULE_INSET, ..Scene::empty(view.kind) };
     let frame_room = if matches!(banding, Banding::Tiers(_)) { LAYER_PADDING } else { 0.0 };
@@ -382,15 +483,10 @@ fn scene_edges(wiring: &Wiring, routes: &Routes) -> Vec<SceneEdge> {
         .zip(texts)
         .enumerate()
         .map(|(index, ((edge, points), text))| SceneEdge {
-            id: edge.id.clone(),
-            source: edge.source,
-            target: edge.target,
-            points: points.clone(),
-            style: edge.style,
-            focal: edge.focal,
             cycle: wiring.is_cycle(index),
             label: labels.remove(&index).map(|rect| LabelBox { rect, text }),
             marks: std::mem::take(&mut marks[index]),
+            ..SceneEdge::new(edge, points.clone())
         })
         .collect()
 }
@@ -476,7 +572,7 @@ pub fn known_edges(view: &View, ids: &[String]) -> Vec<EdgeInput> {
         .iter()
         .filter_map(|edge| {
             let upper = edge.label.trim().to_uppercase();
-            let (text, ends) = if view.kind == Kind::Er { cardinality::split(&upper) } else { (upper, None) };
+            let (text, ends) = if matches!(view.kind, Kind::Er | Kind::UmlClass) { cardinality::split(&upper) } else { (upper, None) };
             let id = if edge.id.is_empty() { format!("{}->{}", edge.source, edge.target) } else { edge.id.clone() };
             Some(EdgeInput {
                 id,

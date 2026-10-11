@@ -49,9 +49,13 @@ fn ambiguous_labels(scene: &Scene, runs: &[Vec<Segment>]) -> usize {
         .count()
 }
 
+/// Checks the scene against the connector rules. Free and arc edges are exempt: they are data lines
+/// placed by their kind's geometry, not connectors; only their labels are still checked against nodes
+/// and other labels.
 pub fn check(scene: &Scene) -> (Vec<Violation>, Measures) {
     let mut violations = Vec::new();
-    let runs: Vec<Vec<Segment>> = scene.edges.iter().map(|edge| segments(&edge.points)).collect();
+    let runs: Vec<Vec<Segment>> =
+        scene.edges.iter().map(|edge| if edge.is_elbow() { segments(&edge.points) } else { Vec::new() }).collect();
     diagonals(scene, &runs, &mut violations);
     label_gaps(scene, &runs, &mut violations);
     overlapping_runs(scene, &runs, &mut violations);
@@ -103,7 +107,8 @@ fn overlapping_runs(scene: &Scene, runs: &[Vec<Segment>], violations: &mut Vec<V
     }
 }
 
-fn too_close_parallel(first: &Segment, second: &Segment) -> bool {
+/// True when two parallel runs share a stretch closer than the minimum parallel gap (rule 3).
+pub fn too_close_parallel(first: &Segment, second: &Segment) -> bool {
     let (across_first, across_second) = match (first.is_horizontal(), second.is_horizontal()) {
         (true, true) => (first.a.y, second.a.y),
         (false, false) => (first.a.x, second.a.x),
@@ -140,7 +145,7 @@ fn side_of(rect: &Rect, point: Point) -> Option<(Side, f64)> {
 fn shared_attach_points(scene: &Scene, violations: &mut Vec<Violation>) {
     for (index, node) in scene.nodes.iter().enumerate() {
         let mut attached: Vec<(Side, f64)> = Vec::new();
-        for edge in &scene.edges {
+        for edge in scene.edges.iter().filter(|edge| edge.is_elbow()) {
             let ends = [(edge.source, edge.points.first()), (edge.target, edge.points.last())];
             for (owner, point) in ends {
                 if let (true, Some(&point)) = (owner == index, point) {

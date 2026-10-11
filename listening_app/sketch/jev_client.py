@@ -20,7 +20,6 @@ from listening_app.sketch.diagrams import (
 JEV_URL = "https://api.typesafe.ai/v1/systemone"
 TIMEOUT_S = 5.0
 YES = 0.5
-ROUTE_CONFIDENCE = 0.4
 UNREQUESTED_NEW_CONFIDENCE = 0.8
 SWITCH_CONFIDENCE = 0.6
 FOCUS_CONFIDENCE = 0.3
@@ -39,6 +38,23 @@ KINDS = {
     DiagramKind.NESTED: "Scope and containment: outer groups hold inner members",
     DiagramKind.LAYERS: "Stacked concerns from top to bottom (user, process, team, QA, done)",
     DiagramKind.DEPENDENCY: "Unordered dependencies or ownership between components",
+    DiagramKind.TIMELINE: "Events, releases or milestones placed in time, e.g. a project history or a roadmap",
+    DiagramKind.PROCESS: "A business process by role lanes where the data or document passed at each handoff matters",
+    DiagramKind.LOOP: "A cycle, flywheel or feedback loop whose last step leads back to the first",
+    DiagramKind.PYRAMID: "Ranked levels built on each other, from a broad base to a narrow top",
+    DiagramKind.FUNNEL: "Stages that a group passes through and that narrow down, e.g. a conversion funnel",
+    DiagramKind.VENN: "Overlapping sets or concepts and what they share",
+    DiagramKind.FISHBONE: "The causes of one problem or incident, grouped in categories",
+    DiagramKind.KANBAN: "Work items and the status column each one is in, e.g. backlog, in progress, done",
+    DiagramKind.JOURNEY: "One person's stages through an experience and how they feel at each stage",
+    DiagramKind.STORY_MAP: "User activities and the stories under them, cut into releases",
+    DiagramKind.UML_CLASS: "Classes with attributes and operations, and inheritance or composition between them",
+    DiagramKind.DEPLOYMENT: "Where software runs: hosts, pods and services inside environments or network zones",
+    DiagramKind.MEDALLION: "Data storage tiers a dataset is promoted through, from raw to curated",
+    DiagramKind.ORG_CHART: "Who owns what: people, teams or agents and who reports to whom",
+    DiagramKind.DB_SCHEMA: "Database tables with typed columns and the foreign keys between them",
+    DiagramKind.QUADRANT: "Items sorted into a two-by-two grid by two criteria, e.g. value and effort",
+    DiagramKind.WARDLEY: "A value chain whose components are placed by how evolved or commoditised they are",
 }
 SHAPES = {
     Shape.SERVICE: "An application service, server, API or backend component that runs code",
@@ -68,6 +84,21 @@ FOCUS_HINTS = {
     DiagramKind.SWIMLANE: "the step or the handoff between lanes that matters most, for example the final decision",
     DiagramKind.NESTED: "the innermost scope the speaker talks about",
     DiagramKind.LAYERS: "the one layer under discussion, for example the bottleneck",
+    DiagramKind.TIMELINE: "the major milestone",
+    DiagramKind.PROCESS: "the step the reader must notice, for example a quality gate",
+    DiagramKind.LOOP: "the station where a person decides or approves",
+    DiagramKind.PYRAMID: "the level the speaker stresses, usually the top",
+    DiagramKind.FUNNEL: "the stage the speaker stresses, for example where most people drop off",
+    DiagramKind.VENN: "the item in the overlap the speaker calls the sweet spot",
+    DiagramKind.FISHBONE: "the cause category confirmed as the root cause",
+    DiagramKind.KANBAN: "the blocked card",
+    DiagramKind.STORY_MAP: "the riskiest story",
+    DiagramKind.UML_CLASS: "the class being implemented or extended",
+    DiagramKind.DEPLOYMENT: "the single point of failure or the newly added host",
+    DiagramKind.MEDALLION: "the tier the speaker stresses, for example the business-ready one",
+    DiagramKind.ORG_CHART: "the front door that receives unclear work",
+    DiagramKind.QUADRANT: "the item to do first",
+    DiagramKind.WARDLEY: "the component that is evolving",
 }
 
 _ROUTING_QUESTIONS: dict[str, dict[str, Any]] = {
@@ -82,6 +113,13 @@ _ROUTING_QUESTIONS: dict[str, dict[str, Any]] = {
         "instructions": "In `new_segment`, does the speaker explicitly ask to start a new, separate diagram?",
         "criteria": {"true": "Explicitly asks for a new or another diagram",
                      "false": "Continues or returns to an existing diagram, or does not mention diagrams"},
+    },
+    "returns": {
+        "type": "noul",
+        "instructions": "In `new_segment`, does the speaker explicitly go back to or name an existing diagram "
+                        "other than `current_diagram`?",
+        "criteria": {"true": "Explicitly returns to or names another existing diagram",
+                     "false": "Continues the current diagram, starts a new one, or does not mention diagrams"},
     },
     "kind": {
         "type": "choice",
@@ -105,24 +143,26 @@ class Routing:
     target: int | None
     confidence: float
     kind: DiagramKind
+    returns: float = 0.0
 
-    def destination(self, has_diagrams: bool) -> Destination | None:
-        """None: the segment adds no structure. Low confidence leaves the choice to the drawing model."""
+    def destination(self, active: int | None) -> Destination | None:
+        """None: the segment adds no structure. Lines stay on the `active` diagram unless the speaker asks for a new
+        one or explicitly returns to another; an unsure new subject leaves the choice to the drawing model."""
         if self.new_requested >= YES:
             return Destination.new(self.kind)
         if self.structural < YES:
             return None
-        if not has_diagrams:
+        if active is None:
             return Destination.new(self.kind)
         if self.target is None:
             return Destination.new(self.kind) if self.confidence >= UNREQUESTED_NEW_CONFIDENCE else Destination.by_drawer()
-        if self.confidence < ROUTE_CONFIDENCE:
-            return Destination.by_drawer()
-        return Destination.existing(self.target)
+        switch = self.switches_to(active)
+        return Destination.existing(active if switch is None else switch)
 
     def switches_to(self, active: int | None) -> int | None:
-        """The diagram the speaker returns to by naming it ("back to diagram 1"), if it is not the current one."""
-        if self.target is None or self.target == active or self.confidence < SWITCH_CONFIDENCE:
+        """The diagram the speaker explicitly returns to ("back to diagram 1"), if it is not the current one."""
+        explicit = self.returns >= YES and self.confidence >= SWITCH_CONFIDENCE
+        if not explicit or self.target is None or self.target == active:
             return None
         return self.target
 
@@ -137,7 +177,8 @@ class JevClient:
         self._http.close()
 
     def route(self, segment: str, previous: list[str], overview: Overview) -> Routing:
-        state = {"new_segment": segment, "previous_segments": previous, "current_diagram": overview.active}
+        current = f"d{overview.active}" if overview.active is not None else None
+        state = {"new_segment": segment, "previous_segments": previous, "current_diagram": current}
         targets = {f"d{number}": summary for number, summary in overview.summaries}
         targets[NEW_TARGET] = "A different subject that none of the existing diagrams covers"
         questions = {**_ROUTING_QUESTIONS,
@@ -147,7 +188,8 @@ class JevClient:
             target = answers["target"]["choice"]
             return Routing(float(answers["structural"]["noul"]), float(answers["new_diagram"]["noul"]),
                            None if target == NEW_TARGET else int(target.removeprefix("d")),
-                           float(answers["target"]["confidence"]), DiagramKind(answers["kind"]["choice"]))
+                           float(answers["target"]["confidence"]), DiagramKind(answers["kind"]["choice"]),
+                           float(answers["returns"]["noul"]))
         except (KeyError, TypeError, ValueError) as exc:
             raise JevError(f"unexpected routing answer: {exc!r}") from exc
 
