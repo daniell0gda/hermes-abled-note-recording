@@ -20,3 +20,4 @@ dist/
 
 # Temporary / generated files
 .gen/
+.playwright-cli/
