@@ -16,14 +16,15 @@ A Rust library and CLI that draws a live-sketch diagram (the `Diagram.view()` JS
 ## Shape
 
 - `sketch_render/` — Rust crate (lib + `sketch-render` binary), only `serde`/`serde_json`.
-  - `spec` — input: the view JSON (`kind`, `nodes` with `shape`/`focal`, `edges` with `style`, `groups`).
+  - `spec` — input: the view JSON (`kind`, `nodes` with `shape`/`focal`, `edges` with `style`/`focal`, `groups`).
   - `params` — the typed knobs a model may choose: direction, node gap, channel width, uniform rank size, theme.
   - `layout` — layered layout: cycle break, longest-path ranks, dummy nodes, barycenter ordering, port-aware
     placement (isotonic regression), straight long edges, optional lanes.
   - `route` — orthogonal edges with r=8 elbows, one channel track per bending hop, fanned attach points.
   - `sequence` — participants, lifelines, one message per row.
   - `label` — label spots along each line; the first spot clear of nodes, labels and other lines wins.
-  - `svg` — the `diagram-design` look: paper, type tags, sublabel from `(…)`, focal accent, bridges, legend, dark theme.
+  - `svg` — the `diagram-design` look: paper, type tags, sublabel from `(…)`, focal accent on nodes and edges,
+    bridges, legend, dark theme.
   - `check` — the six connector rules as violations, plus crossings, bends, area and ambiguous labels.
   - `variants` — renders a parameter grid, scores each result and picks the best.
 - `.claude/skills/sketch-eval/scripts/render_rust.py` draws a line-format file with the CLI (optional Jev-like

@@ -123,6 +123,7 @@ fn draw_message(message: &EdgeInput, y: f64, centres: &[f64], column: &[usize]) 
         target: message.target,
         points,
         style: message.style,
+        focal: message.focal,
         label: (!message.text.is_empty()).then(|| LabelBox { rect: label, text: message.text.clone() }),
     }
 }

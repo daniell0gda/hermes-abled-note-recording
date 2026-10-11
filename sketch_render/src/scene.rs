@@ -39,6 +39,7 @@ pub struct SceneEdge {
     pub target: usize,
     pub points: Vec<Point>,
     pub style: EdgeStyle,
+    pub focal: bool,
     pub label: Option<LabelBox>,
 }
 
@@ -87,6 +88,7 @@ pub struct EdgeInput {
     pub source: usize,
     pub target: usize,
     pub style: EdgeStyle,
+    pub focal: bool,
     pub text: String,
 }
 
@@ -203,6 +205,7 @@ fn layered(view: &View, params: &Params) -> Scene {
             target: edge.target,
             points,
             style: edge.style,
+            focal: edge.focal,
             label: labels.remove(&index).map(|rect| LabelBox { rect, text: edge.text.clone() }),
         })
         .collect();
@@ -290,6 +293,7 @@ pub fn known_edges(view: &View, ids: &[String]) -> Vec<EdgeInput> {
                 source: index_of(&edge.source)?,
                 target: index_of(&edge.target)?,
                 style: drawn_style(view.kind, edge.style),
+                focal: edge.focal,
                 text: edge.label.trim().to_uppercase(),
             })
         })

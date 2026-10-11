@@ -13,6 +13,7 @@ use crate::text::mono_width;
 const CORNER: f64 = 8.0;
 const HOP: f64 = 8.0;
 const HOP_ROOM: f64 = 12.0;
+const FOCAL_LINE_WIDTH: f64 = 1.4;
 const LEGEND_TOP: f64 = 16.0;
 const LEGEND_ROW: f64 = 24.0;
 const LEGEND_HEIGHT: f64 = 56.0;
@@ -165,6 +166,15 @@ fn line_look(style: EdgeStyle, palette: &Palette) -> LineLook {
     }
 }
 
+fn edge_look(edge: &SceneEdge, palette: &Palette) -> LineLook {
+    let look = line_look(edge.style, palette);
+    if edge.focal {
+        LineLook { stroke: palette.accent, marker: "arrow-accent", width: FOCAL_LINE_WIDTH, ..look }
+    } else {
+        look
+    }
+}
+
 fn box_look(treatment: Treatment, palette: &Palette) -> BoxLook {
     let wash = |alpha: f64| format!("rgba({},{alpha})", palette.wash);
     let (fill, stroke, dash) = match treatment {
@@ -210,7 +220,7 @@ fn hops(scene: &Scene) -> Vec<Vec<Vec<f64>>> {
 }
 
 fn draw_edge(out: &mut String, edge: &SceneEdge, hops: &[Vec<f64>], palette: &Palette) {
-    let look = line_look(edge.style, palette);
+    let look = edge_look(edge, palette);
     let _ = write!(
         out,
         r#"<path d="{}" fill="none" stroke="{}" stroke-width="{}"{} marker-end="url(#{})"/>"#,
@@ -281,7 +291,7 @@ fn hops_in_travel_order(hops: Option<&Vec<f64>>, heading: f64) -> Vec<f64> {
 
 fn draw_label(out: &mut String, edge: &SceneEdge, palette: &Palette) {
     let Some(label) = &edge.label else { return };
-    let look = line_look(edge.style, palette);
+    let look = edge_look(edge, palette);
     let rect = label.rect;
     let _ = write!(
         out,

@@ -80,6 +80,8 @@ pub struct EdgeSpec {
     pub label: String,
     #[serde(default)]
     pub style: EdgeStyle,
+    #[serde(default)]
+    pub focal: bool,
 }
 
 #[derive(Clone, Debug, Deserialize)]

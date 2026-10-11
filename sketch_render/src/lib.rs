@@ -165,6 +165,17 @@ mod tests {
     }
 
     #[test]
+    fn a_focal_edge_is_drawn_in_the_accent_colour() {
+        for (name, json) in REFERENCES {
+            let mut focused = view(json);
+            focused.edges[0].focal = true;
+            let svg = render(&focused, &Params::default()).svg;
+            assert_eq!(svg.matches("url(#arrow-accent)").count(), 1, "{name}");
+            assert_eq!(render(&view(json), &Params::default()).svg.matches("url(#arrow-accent)").count(), 0, "{name}");
+        }
+    }
+
+    #[test]
     fn the_svg_is_an_accessible_figure() {
         let rendered = render(&backend(), &Params::default());
         assert!(rendered.svg.starts_with("<svg"));
