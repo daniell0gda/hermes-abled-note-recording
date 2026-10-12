@@ -63,6 +63,7 @@ class AppController:
         self._sketch_lock = threading.RLock()
         self._sketch: LiveSketch | None = None
         self._sketch_busy = False
+        self._sketch_closed_while_busy = False
         self._sketch_hotkey: GlobalHotkey | None = None
         self._sketch_hotkey_text = ""
         self._unfinished: list[SessionFiles] = []
@@ -427,7 +428,10 @@ class AppController:
     def _end_sketch_transition(self) -> None:
         with self._sketch_lock:
             self._sketch_busy = False
+            closed_meanwhile, self._sketch_closed_while_busy = self._sketch_closed_while_busy, False
         self._refresh()
+        if closed_meanwhile and self.is_sketching:
+            self.toggle_sketch()
 
     def _start_sketch_worker(self) -> None:
         with contextlib.suppress(ControlError):
@@ -477,9 +481,15 @@ class AppController:
         return sketch.folder
 
     def _sketch_window_closed(self) -> None:
-        """The user closed the window: live sketch switches off, as with the hotkey."""
-        if self._sketch is not None:
-            self.toggle_sketch()
+        """The user closed the window: live sketch switches off, as with the tray. Closed during a switch, it
+        switches off when the switch ends."""
+        with self._sketch_lock:
+            if self._sketch_busy:
+                self._sketch_closed_while_busy = True
+                return
+            if self._sketch is None:
+                return
+        self.toggle_sketch()
 
     def _stop_session(self, session: RecordingSession) -> Path | None:
         try:
