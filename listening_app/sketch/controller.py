@@ -70,6 +70,7 @@ class LiveSketch:
             "pointer": self._pointer_moved, "leave": self._pointer_left, "boxes": self._boxes_drawn,
             "activate": self._tab_chosen, "select": self._selected, "closed": self._window_closed,
             "microphone": self._microphone_toggled, "copy-path": self._copy_path,
+            "new-diagram": self._new_diagram,
         }
 
     def start(self, recording: RecordingSession | None, listen: bool = True) -> None:
@@ -190,6 +191,9 @@ class LiveSketch:
             self._window.notice(COPY_FAILED_NOTICE)
             return
         self._window.notice(PATH_COPIED_NOTICE)
+
+    def _new_diagram(self, event: WindowEvent) -> None:
+        self._pipeline.new_diagram()
 
     def _heard(self, transcription: Transcription) -> None:
         segment = transcription.segment

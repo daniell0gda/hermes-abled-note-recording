@@ -31,6 +31,7 @@ def window_page() -> str:
 <header class="sk-header">
 <div><div class="sk-eyebrow-title" id="eyebrow"></div><h1 class="sk-title" id="title"></h1></div>
 <div class="sk-tools">
+<button class="sk-tool" id="new-diagram" type="button">New diagram</button>
 <button class="sk-tool" id="mic" type="button" aria-pressed="false" disabled><span class="sk-mic-dot"></span><span id="mic-label">Mic off</span></button>
 <button class="sk-tool" id="copy-path" type="button" disabled>Copy path</button>
 </div>

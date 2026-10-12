@@ -77,6 +77,7 @@ handoff edges. A dependency diagram gets no question: code accents the edge that
 
 - Built-in window (pywebview on Edge WebView2), one tab per diagram labelled number + title.
 - Saying a diagram or clicking its tab switches the active diagram.
+- The "New diagram" button opens an empty flow diagram and makes it the active one, without a spoken request.
 
 ## Pointing and selection
 

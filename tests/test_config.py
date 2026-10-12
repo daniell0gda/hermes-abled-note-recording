@@ -157,7 +157,7 @@ def test_sketch_defaults(config_file: Path) -> None:
     assert sketch.label_language is Language.AUTO
     assert sketch.point_radius_px == 24
     assert sketch.point_window_s == 2
-    assert sketch.retrospect_every_n == 1
+    assert sketch.retrospect_every_n == 0
     assert sketch.retrospect_on_correction is False
     assert sketch.retrospect_max_nodes == 9
 

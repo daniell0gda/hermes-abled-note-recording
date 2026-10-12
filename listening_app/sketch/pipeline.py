@@ -34,7 +34,7 @@ PREVIOUS_SEGMENTS = 3
 SUMMARY_AFTER_LINES = 16
 SUMMARY_FOLD_LINES = 8
 STOP_TIMEOUT_S = 2.0
-DEFAULT_RETROSPECT_EVERY_N = 1
+DEFAULT_RETROSPECT_EVERY_N = 0
 DEFAULT_RETROSPECT_MAX_NODES = 9
 DEFAULT_BUCKET_B_MIN_NEW_LINES = 2
 DEFAULT_BUCKET_B_DEBOUNCE_S = 2.0
@@ -163,6 +163,13 @@ class SketchPipeline:
     def activate(self, number: int) -> None:
         with self._changed:
             self._diagrams.activate(number)
+
+    def new_diagram(self) -> None:
+        """Open an empty diagram and make it the current one, without a spoken request."""
+        with self._changed:
+            self._diagrams.create(DiagramKind.FLOW)
+            state = self._state(None)
+        self._publish(state)
 
     def select(self, number: int, element_ids: list[str]) -> None:
         with self._changed:

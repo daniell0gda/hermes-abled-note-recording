@@ -16,6 +16,7 @@
   const mic = document.getElementById("mic");
   const micLabel = document.getElementById("mic-label");
   const copyPath = document.getElementById("copy-path");
+  const newDiagram = document.getElementById("new-diagram");
   const empty = { number: 0, title: "", kind: "flow", nodes: [], edges: [], groups: [], selected: [], pointed: null };
 
   let views = [];
@@ -114,6 +115,7 @@
     send({ type: "microphone" });
   });
   copyPath.addEventListener("click", () => send({ type: "copy-path", number: active }));
+  newDiagram.addEventListener("click", () => send({ type: "new-diagram" }));
 
   svg.addEventListener("click", (event) => {
     if (!current().number) return;

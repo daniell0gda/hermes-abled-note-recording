@@ -75,7 +75,7 @@ sketch:
   bucket_b_min_new_lines: 2
   bucket_b_debounce_s: 2.0
   bucket_b_max_wait_s: 10.0
-  # retrospect_every_n: 0   # optional: turn off Bucket A's retrospect and rely on B
+  retrospect_every_n: 0       # default: Bucket A's full rewrite is off, so new nodes do not wait for it; B cleans up
 ```
 
 ## Log lines

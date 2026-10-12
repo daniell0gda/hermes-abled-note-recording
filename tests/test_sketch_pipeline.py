@@ -192,6 +192,19 @@ def test_an_explicit_new_diagram_request_opens_an_empty_tab_at_once() -> None:
     assert latest_view(recorder, 2)["title"] == "Order lifecycle"
 
 
+def test_the_new_diagram_button_opens_an_empty_flow_tab_and_makes_it_current() -> None:
+    sketch, recorder = pipeline(FakeJudge(FIRST), FakeDrawer(FLOW))
+    sketch.route(segment("Requests go to auth."))
+    sketch.draw_next()
+
+    sketch.new_diagram()
+
+    assert [view["number"] for view in recorder.states[-1].views] == [1, 2]
+    assert recorder.states[-1].active == 2
+    assert latest_view(recorder, 2)["kind"] == "flow"
+    assert latest_view(recorder, 2)["nodes"] == []
+
+
 def test_segments_arriving_while_a_draw_is_in_flight_are_batched_into_the_next_draw() -> None:
     drawer = FakeDrawer(FLOW)
     drawer.gate = threading.Event()
