@@ -94,6 +94,23 @@ def test_a_saved_page_gives_back_the_view_it_was_written_from(tmp_path: Path) ->
     assert read_diagram(tmp_path / "01-request-path.html") == original
 
 
+def test_a_saved_elbow_drawing_gives_back_its_view_without_the_svg(tmp_path: Path) -> None:
+    original = view(label="Auth service")
+    svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"></svg>'
+    DiagramFiles(tmp_path).save({**original, "svg": svg, "theme": "dark"})
+
+    assert read_diagram(tmp_path / "01-request-path.html") == {**original, "theme": "dark"}
+
+
+def test_a_page_from_the_renderer_before_elbow_still_gives_back_its_view(tmp_path: Path) -> None:
+    original = view(label="Auth service")
+    page = tmp_path / "01-request-path.html"
+    page.write_text(f'<script>SketchRenderer.render(document.getElementById("sketch"), {json.dumps(original)});</script>',
+                    encoding="utf-8")
+
+    assert read_diagram(page) == original
+
+
 def test_a_page_without_a_diagram_is_refused(tmp_path: Path) -> None:
     page = tmp_path / "notes.html"
     page.write_text("<html><body>not a diagram</body></html>", encoding="utf-8")

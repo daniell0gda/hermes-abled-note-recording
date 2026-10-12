@@ -14,7 +14,8 @@ SKETCH_ASSETS = paths.ASSETS_DIR / "sketch"
 FONTS_URL = ("https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Geist:wght@400;500;600"
              "&family=Geist+Mono:wght@400;500&display=swap")
 _SLUG_LENGTH = 48
-_EMBEDDED_VIEW = re.compile(r'SketchRenderer\.render\(document\.getElementById\("sketch"\), (.*)\);</script>')
+_EMBEDDED_VIEW = re.compile(r'<script type="application/json" id="diagram-view">(.*?)</script>')
+_LEGACY_VIEW = re.compile(r'SketchRenderer\.render\(document\.getElementById\("sketch"\), (.*)\);</script>')
 
 
 @cache
@@ -43,9 +44,16 @@ def drawing(view: dict[str, Any], title: str) -> str:
 <script>SketchRenderer.render(document.getElementById("sketch"), {script_json(view)});</script>"""
 
 
+def embedded_view(view: dict[str, Any]) -> str:
+    """The view as JSON for the saved page, without elbow's SVG, so the page can be opened again."""
+    data = {key: value for key, value in view.items() if key != "svg"}
+    return f'<script type="application/json" id="diagram-view">{script_json(data)}</script>'
+
+
 def read_diagram(path: Path) -> dict[str, Any]:
-    """The render view that `diagram_page` embedded in the saved page at `path`. Raises ValueError when there is none."""
-    match = _EMBEDDED_VIEW.search(path.read_text(encoding="utf-8"))
+    """The view that `diagram_page` embedded in the saved page at `path`. Raises ValueError when there is none."""
+    text = path.read_text(encoding="utf-8")
+    match = _EMBEDDED_VIEW.search(text) or _LEGACY_VIEW.search(text)
     if match is None:
         raise ValueError(f"{path.name} holds no diagram")
     view: dict[str, Any] = json.loads(match[1].replace("<\\/", "</"))
@@ -70,6 +78,7 @@ def diagram_page(view: dict[str, Any]) -> str:
 <header class="sk-header"><div class="sk-eyebrow-title">Diagram {view["number"]} · {html.escape(view["kind"])}</div>
 <h1 class="sk-title">{title}</h1></header>
 {drawing(view, title)}
+{embedded_view(view)}
 </div>
 </body>
 </html>
